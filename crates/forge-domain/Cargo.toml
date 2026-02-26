@@ -1,0 +1,17 @@
+[package]
+name = "forge-domain"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Core domain types and traits for the Forge AI agent engine"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,74 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/forge-domain",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Forge Contributors"]
+license = "MIT"
+repository = "https://github.com/user/forge-engine"
+rust-version = "1.75"
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+tokio-util = "0.7"
+tokio-stream = "0.1"
+futures = "0.3"
+async-trait = "0.1"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+toml = "0.8"
+
+# HTTP client
+reqwest = { version = "0.11", features = ["json", "stream", "native-tls", "socks"] }
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Logging & tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# OpenTelemetry
+opentelemetry = "0.27"
+opentelemetry_sdk = { version = "0.27", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.27", features = ["tonic"] }
+tracing-opentelemetry = "0.28"
+
+# Utilities
+uuid = { version = "1.6", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+regex = "1.10"
+aho-corasick = "1.1"
+async-stream = "0.3"
+dirs = "5.0"
+parking_lot = "0.12"
+dashmap = "6"
+lru = "0.12"
+sha2 = "0.10"
+rand = "0.8"
+
+# Testing
+tempfile = "3.8"
+insta = { version = "1.40", features = ["yaml", "filters"] }
+
+# Internal crates
+forge-domain = { path = "crates/forge-domain" }
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+unwrap_used = "warn"
+expect_used = "warn"
