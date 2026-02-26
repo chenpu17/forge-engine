@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/forge-domain",
     "crates/forge-config",
+    "crates/forge-infra",
 ]
 
 [workspace.package]
@@ -65,6 +66,7 @@ insta = { version = "1.40", features = ["yaml", "filters"] }
 # Internal crates
 forge-domain = { path = "crates/forge-domain" }
 forge-config = { path = "crates/forge-config" }
+forge-infra = { path = "crates/forge-infra" }
 
 [workspace.lints.rust]
 unsafe_code = "deny"
