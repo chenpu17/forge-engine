@@ -4,6 +4,8 @@ members = [
     "crates/forge-domain",
     "crates/forge-config",
     "crates/forge-infra",
+    "crates/forge-prompt",
+    "crates/forge-memory",
 ]
 
 [workspace.package]
@@ -67,6 +69,8 @@ insta = { version = "1.40", features = ["yaml", "filters"] }
 forge-domain = { path = "crates/forge-domain" }
 forge-config = { path = "crates/forge-config" }
 forge-infra = { path = "crates/forge-infra" }
+forge-prompt = { path = "crates/forge-prompt" }
+forge-memory = { path = "crates/forge-memory" }
 
 [workspace.lints.rust]
 unsafe_code = "deny"

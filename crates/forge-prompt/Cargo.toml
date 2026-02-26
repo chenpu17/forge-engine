@@ -1,0 +1,21 @@
+[package]
+name = "forge-prompt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Prompt management and persona system for the Forge AI agent engine"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+toml = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }
+dirs = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true
