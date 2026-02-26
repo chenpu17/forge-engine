@@ -142,4 +142,16 @@ mod tests {
         assert_eq!(estimate_tokens_fast("a".repeat(100).as_str()), 25);
         assert_eq!(estimate_tokens_fast(""), 0);
     }
+
+    #[test]
+    fn test_estimate_tokens_emoji() {
+        let result = estimate_tokens("🎉🎊🎈");
+        assert!(result >= 1, "emoji should produce at least 1 token");
+    }
+
+    #[test]
+    fn test_estimate_tokens_fast_cjk() {
+        let result = estimate_tokens_fast("你好世界测试");
+        assert!(result >= 1, "CJK fast estimate should be >= 1");
+    }
 }

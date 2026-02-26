@@ -14,6 +14,7 @@ pub mod model;
 pub mod proxy;
 pub mod session;
 pub mod tools;
+pub mod ui;
 
 pub use llm::{LlmConfig, LlmMode, LlmProvider, SubAgentLlmConfig};
 pub use loader::ConfigLoader;
@@ -25,17 +26,23 @@ pub use model::{
 };
 pub use proxy::{ProxyAuth, ProxyConfig, ProxyMode};
 pub use session::SessionConfig;
-pub use tools::ToolsConfig;
+pub use tools::{
+    EnvPolicy, EnvPolicyMode, McpSettings, OperationType, PermissionRuleConfig, PolicyAction,
+    ToolsConfig, TrustLevelConfig, TrustLevelSetting,
+};
+pub use ui::UiConfig;
 
 use serde::{Deserialize, Serialize};
 
 /// Main configuration structure for the Forge engine.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ForgeConfig {
     /// LLM settings.
     #[serde(default)]
     pub llm: LlmConfig,
+    /// UI settings.
+    #[serde(default)]
+    pub ui: UiConfig,
     /// Tool settings.
     #[serde(default)]
     pub tools: ToolsConfig,

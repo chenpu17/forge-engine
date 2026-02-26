@@ -5,10 +5,8 @@ use serde::{Deserialize, Serialize};
 /// Proxy mode — determines how to configure HTTP proxy.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-#[derive(Default)]
 pub enum ProxyMode {
     /// No proxy, direct connection (default on macOS/Linux).
-    #[default]
     None,
     /// Use system proxy settings (default on Windows).
     System,
@@ -16,6 +14,20 @@ pub enum ProxyMode {
     Environment,
     /// Manual proxy configuration.
     Manual,
+}
+
+#[allow(clippy::derivable_impls)] // platform-specific default
+impl Default for ProxyMode {
+    fn default() -> Self {
+        #[cfg(target_os = "windows")]
+        {
+            Self::System
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            Self::None
+        }
+    }
 }
 
 
@@ -136,6 +148,24 @@ impl ProxyConfig {
         }
     }
 
+    /// Create a "system proxy" configuration.
+    #[must_use]
+    pub fn system() -> Self {
+        Self {
+            mode: ProxyMode::System,
+            ..Default::default()
+        }
+    }
+
+    /// Create an "environment variable" proxy configuration.
+    #[must_use]
+    pub fn environment() -> Self {
+        Self {
+            mode: ProxyMode::Environment,
+            ..Default::default()
+        }
+    }
+
     /// Create a manual proxy configuration.
     #[must_use]
     pub fn manual(http_url: impl Into<String>) -> Self {
@@ -144,6 +174,27 @@ impl ProxyConfig {
             http_url: Some(http_url.into()),
             ..Default::default()
         }
+    }
+
+    /// Validate proxy configuration.
+    ///
+    /// # Errors
+    /// Returns a description of the validation failure.
+    pub fn validate(&self) -> std::result::Result<(), String> {
+        if self.mode == ProxyMode::Manual && self.http_url.is_none() {
+            return Err("proxy mode is 'manual' but no http_url is set".into());
+        }
+        if let Some(ref url) = self.http_url {
+            if !url.starts_with("http://") && !url.starts_with("https://") && !url.starts_with("socks5://") {
+                return Err(format!("invalid proxy http_url scheme: {url}"));
+            }
+        }
+        if let Some(ref url) = self.https_url {
+            if !url.starts_with("http://") && !url.starts_with("https://") && !url.starts_with("socks5://") {
+                return Err(format!("invalid proxy https_url scheme: {url}"));
+            }
+        }
+        Ok(())
     }
 
     /// Get the effective proxy mode.
@@ -214,5 +265,22 @@ impl ProxyConfig {
             }
         }
         self.danger_accept_invalid_certs
+    }
+
+    /// Get the effective no-proxy list.
+    ///
+    /// Priority: `FORGE_NO_PROXY` > `NO_PROXY` > config.
+    #[must_use]
+    pub fn effective_no_proxy(&self) -> Vec<String> {
+        if let Ok(list) = std::env::var("FORGE_NO_PROXY") {
+            return list.split(',').map(|s| s.trim().to_string()).collect();
+        }
+        if let Ok(list) = std::env::var("NO_PROXY") {
+            return list.split(',').map(|s| s.trim().to_string()).collect();
+        }
+        if let Ok(list) = std::env::var("no_proxy") {
+            return list.split(',').map(|s| s.trim().to_string()).collect();
+        }
+        self.no_proxy.clone()
     }
 }

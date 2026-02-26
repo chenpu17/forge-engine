@@ -195,3 +195,62 @@ impl Default for RetryConfig {
         Self::NONE
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_confirmation_level_default() {
+        assert_eq!(ConfirmationLevel::default(), ConfirmationLevel::None);
+    }
+
+    #[test]
+    fn test_confirmation_level_serde() {
+        let json = serde_json::to_string(&ConfirmationLevel::Dangerous).expect("serialize");
+        let parsed: ConfirmationLevel = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(parsed, ConfirmationLevel::Dangerous);
+    }
+
+    #[test]
+    fn test_retry_config_none() {
+        let cfg = RetryConfig::NONE;
+        assert!(!cfg.is_enabled());
+        assert_eq!(cfg.delay_for_attempt(0), 0);
+    }
+
+    #[test]
+    fn test_retry_config_network() {
+        let cfg = RetryConfig::NETWORK;
+        assert!(cfg.is_enabled());
+        assert_eq!(cfg.delay_for_attempt(0), 1000);
+        assert_eq!(cfg.delay_for_attempt(1), 2000);
+        assert_eq!(cfg.delay_for_attempt(2), 4000);
+    }
+
+    #[test]
+    fn test_tool_output_serde() {
+        let out = ToolOutput {
+            content: "hello".to_string(),
+            is_error: false,
+            data: Some(serde_json::json!({"key": "value"})),
+        };
+        let json = serde_json::to_string(&out).expect("serialize");
+        let parsed: ToolOutput = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(parsed.content, "hello");
+        assert!(!parsed.is_error);
+        assert!(parsed.data.is_some());
+    }
+
+    #[test]
+    fn test_tool_def_serde() {
+        let def = ToolDef {
+            name: "test".to_string(),
+            description: "A test tool".to_string(),
+            parameters: serde_json::json!({"type": "object"}),
+        };
+        let json = serde_json::to_string(&def).expect("serialize");
+        let parsed: ToolDef = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(parsed.name, "test");
+    }
+}

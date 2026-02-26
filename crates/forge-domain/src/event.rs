@@ -380,3 +380,58 @@ pub struct ProjectCommand {
     /// What this command does.
     pub description: String,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tool_call_serde_roundtrip() {
+        let tc = ToolCall {
+            id: "tc_1".to_string(),
+            name: "bash".to_string(),
+            input: serde_json::json!({"command": "ls"}),
+        };
+        let json = serde_json::to_string(&tc).expect("serialize");
+        let parsed: ToolCall = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(parsed.id, "tc_1");
+        assert_eq!(parsed.name, "bash");
+    }
+
+    #[test]
+    fn test_tool_result_serde_roundtrip() {
+        let tr = ToolResult {
+            tool_call_id: "tc_1".to_string(),
+            output: "file.txt".to_string(),
+            is_error: false,
+            path_confirmation: None,
+        };
+        let json = serde_json::to_string(&tr).expect("serialize");
+        let parsed: ToolResult = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(parsed.tool_call_id, "tc_1");
+        assert!(!parsed.is_error);
+    }
+
+    #[test]
+    fn test_usage_default() {
+        let u = Usage::default();
+        assert_eq!(u.input_tokens, 0);
+        assert_eq!(u.output_tokens, 0);
+        assert!(u.cache_read_input_tokens.is_none());
+    }
+
+    #[test]
+    fn test_project_type_display() {
+        assert_eq!(ProjectType::Rust.to_string(), "Rust");
+        assert_eq!(ProjectType::Node.to_string(), "Node.js");
+        assert_eq!(ProjectType::Unknown.to_string(), "Unknown");
+    }
+
+    #[test]
+    fn test_todo_status_serde() {
+        let json = serde_json::to_string(&TodoStatus::InProgress).expect("serialize");
+        assert_eq!(json, "\"inprogress\"");
+        let parsed: TodoStatus = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(parsed, TodoStatus::InProgress);
+    }
+}

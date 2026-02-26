@@ -41,6 +41,14 @@ pub fn data_dir() -> std::path::PathBuf {
         .join(".forge")
 }
 
+/// Get the Forge config directory.
+///
+/// Returns `~/.forge` on all systems (unified with data directory).
+#[must_use]
+pub fn config_dir() -> std::path::PathBuf {
+    data_dir()
+}
+
 /// Initialize the infrastructure.
 ///
 /// Creates standard directories, loads config, and initializes logging.

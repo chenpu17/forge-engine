@@ -80,6 +80,23 @@ pub enum VendorType {
     Custom,
 }
 
+impl VendorType {
+    /// Get UI icon for this vendor.
+    #[must_use]
+    pub const fn icon(self) -> &'static str {
+        match self {
+            Self::Anthropic => "🟠",
+            Self::Openai => "🟢",
+            Self::Google => "🔷",
+            Self::Zhipu => "🔵",
+            Self::Deepseek => "🟣",
+            Self::Moonshot => "🌙",
+            Self::Ollama => "🦙",
+            Self::Custom => "🤖",
+        }
+    }
+}
+
 /// API endpoint configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
