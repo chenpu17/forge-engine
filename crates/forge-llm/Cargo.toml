@@ -1,0 +1,41 @@
+[package]
+name = "forge-llm"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "LLM provider adapters for Forge Engine"
+
+[dependencies]
+forge-config = { workspace = true }
+forge-infra = { workspace = true }
+
+# Async
+async-trait = { workspace = true }
+async-stream = { workspace = true }
+tokio = { workspace = true, features = ["time", "sync"] }
+futures = { workspace = true }
+
+# HTTP
+reqwest = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# Concurrency
+parking_lot = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true
