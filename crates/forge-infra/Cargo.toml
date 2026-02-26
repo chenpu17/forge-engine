@@ -6,12 +6,10 @@ license.workspace = true
 description = "Infrastructure utilities for the Forge AI agent engine"
 
 [dependencies]
-forge-domain = { workspace = true }
 forge-config = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 chrono = { workspace = true }
 dirs = { workspace = true }

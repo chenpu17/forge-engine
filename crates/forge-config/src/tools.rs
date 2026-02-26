@@ -215,3 +215,41 @@ pub struct EnvPolicy {
     #[serde(default)]
     pub preset: Option<String>,
 }
+
+/// Recommended environment variables to expose in allowlist mode.
+const RECOMMENDED_ENV_ALLOWLIST: &[&str] = &["PATH", "HOME", "USER", "LANG", "TERM"];
+
+impl EnvPolicy {
+    fn preset_allowlist(&self) -> Option<&'static [&'static str]> {
+        match self.preset.as_deref() {
+            Some(preset) if preset.eq_ignore_ascii_case("recommended") => {
+                Some(RECOMMENDED_ENV_ALLOWLIST)
+            }
+            _ => None,
+        }
+    }
+
+    /// Apply the policy to an environment iterator.
+    #[must_use]
+    pub fn apply<I>(&self, env: I) -> HashMap<String, String>
+    where
+        I: IntoIterator<Item = (String, String)>,
+    {
+        use std::collections::HashSet;
+        match self.mode {
+            EnvPolicyMode::All => env.into_iter().collect(),
+            EnvPolicyMode::Allowlist => {
+                let mut allow: HashSet<String> =
+                    self.allowlist.iter().cloned().collect();
+                if let Some(preset) = self.preset_allowlist() {
+                    allow.extend(preset.iter().map(|v| (*v).to_string()));
+                }
+                env.into_iter().filter(|(k, _)| allow.contains(k)).collect()
+            }
+            EnvPolicyMode::Denylist => {
+                let deny: HashSet<String> = self.denylist.iter().cloned().collect();
+                env.into_iter().filter(|(k, _)| !deny.contains(k)).collect()
+            }
+        }
+    }
+}

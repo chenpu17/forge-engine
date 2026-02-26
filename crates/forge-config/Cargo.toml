@@ -6,7 +6,6 @@ license.workspace = true
 description = "Configuration system for the Forge AI agent engine"
 
 [dependencies]
-forge-domain = { path = "../forge-domain" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

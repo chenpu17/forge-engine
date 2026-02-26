@@ -14,6 +14,7 @@ use tracing_subscriber::{
 ///
 /// # Errors
 /// Returns error if logging initialization fails.
+// TODO: support `config.json` flag for JSON-formatted log output
 pub fn init_logging(config: &LoggingConfig) -> Result<()> {
     let filter = EnvFilter::try_from_env("FORGE_LOG")
         .or_else(|_| EnvFilter::try_from_env("RUST_LOG"))
