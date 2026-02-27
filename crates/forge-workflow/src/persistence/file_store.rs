@@ -22,9 +22,13 @@ impl FileWorkflowStore {
         Self { base_dir: base_dir.into() }
     }
 
-    /// 获取工作流文件路径
+    /// 获取工作流文件路径（对 ID 做字符过滤防止路径穿越）
     fn workflow_path(&self, id: &str) -> PathBuf {
-        self.base_dir.join(format!("{id}.json"))
+        let safe_id: String = id
+            .chars()
+            .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+            .collect();
+        self.base_dir.join(format!("{safe_id}.json"))
     }
 
     /// 确保目录存在

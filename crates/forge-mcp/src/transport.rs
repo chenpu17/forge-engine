@@ -1276,7 +1276,13 @@ impl StreamableHttpTransport {
             Ok(JsonRpcMessage::Response(response)) => {
                 let id = match &response.id {
                     RequestId::Number(n) => *n,
-                    RequestId::String(s) => s.parse().unwrap_or(0),
+                    RequestId::String(s) => match s.parse() {
+                        Ok(n) => n,
+                        Err(_) => {
+                            tracing::warn!("Non-numeric request ID in Streamable HTTP response: {s}");
+                            return;
+                        }
+                    },
                 };
 
                 let sender = pending.lock().remove(&id);
