@@ -110,6 +110,20 @@ pub struct ToolOutput {
     pub data: Option<Value>,
 }
 
+impl ToolOutput {
+    /// Create a successful output.
+    #[must_use]
+    pub fn success(content: impl Into<String>) -> Self {
+        Self { content: content.into(), is_error: false, data: None }
+    }
+
+    /// Create an error output.
+    #[must_use]
+    pub fn error(content: impl Into<String>) -> Self {
+        Self { content: content.into(), is_error: true, data: None }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Tool definition (sent to LLM)
 // ---------------------------------------------------------------------------

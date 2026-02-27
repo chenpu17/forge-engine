@@ -61,6 +61,15 @@ pub enum ToolError {
     #[error("timeout after {0}s")]
     Timeout(u64),
 
+    /// Path requires user confirmation before access.
+    #[error("path confirmation required: {path} - {reason}")]
+    PathConfirmationRequired {
+        /// The path that needs confirmation.
+        path: String,
+        /// Human-readable reason.
+        reason: String,
+    },
+
     /// IO error during tool execution.
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),

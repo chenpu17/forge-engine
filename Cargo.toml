@@ -8,6 +8,7 @@ members = [
     "crates/forge-memory",
     "crates/forge-llm",
     "crates/forge-session",
+    "crates/forge-tools",
 ]
 
 [workspace.package]
@@ -75,6 +76,7 @@ forge-prompt = { path = "crates/forge-prompt" }
 forge-memory = { path = "crates/forge-memory" }
 forge-llm = { path = "crates/forge-llm" }
 forge-session = { path = "crates/forge-session" }
+forge-tools = { path = "crates/forge-tools" }
 
 [workspace.lints.rust]
 unsafe_code = "deny"
