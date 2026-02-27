@@ -7,6 +7,8 @@ members = [
     "crates/forge-prompt",
     "crates/forge-memory",
     "crates/forge-llm",
+    "crates/forge-lsp",
+    "crates/forge-mcp",
     "crates/forge-session",
     "crates/forge-tools",
 ]
@@ -63,6 +65,9 @@ dashmap = "6"
 lru = "0.12"
 sha2 = "0.10"
 rand = "0.8"
+base64 = "0.22"
+url = "2.5"
+urlencoding = "2.1"
 
 # Testing
 tempfile = "3.8"
@@ -77,6 +82,8 @@ forge-memory = { path = "crates/forge-memory" }
 forge-llm = { path = "crates/forge-llm" }
 forge-session = { path = "crates/forge-session" }
 forge-tools = { path = "crates/forge-tools" }
+forge-lsp = { path = "crates/forge-lsp" }
+forge-mcp = { path = "crates/forge-mcp" }
 
 [workspace.lints.rust]
 unsafe_code = "deny"
