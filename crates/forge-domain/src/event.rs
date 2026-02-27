@@ -217,6 +217,30 @@ pub struct ToolResult {
     pub path_confirmation: Option<PathConfirmation>,
 }
 
+impl ToolResult {
+    /// Create a successful result
+    #[must_use]
+    pub fn success(tool_call_id: impl Into<String>, output: impl Into<String>) -> Self {
+        Self {
+            tool_call_id: tool_call_id.into(),
+            output: output.into(),
+            is_error: false,
+            path_confirmation: None,
+        }
+    }
+
+    /// Create an error result
+    #[must_use]
+    pub fn error(tool_call_id: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            tool_call_id: tool_call_id.into(),
+            output: message.into(),
+            is_error: true,
+            path_confirmation: None,
+        }
+    }
+}
+
 /// Path confirmation request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PathConfirmation {

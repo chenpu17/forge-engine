@@ -437,6 +437,36 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b"
 
 [[package]]
+name = "forge-agent"
+version = "0.1.0"
+dependencies = [
+ "aho-corasick",
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "dashmap",
+ "forge-config",
+ "forge-domain",
+ "forge-infra",
+ "forge-llm",
+ "forge-prompt",
+ "forge-session",
+ "forge-tools",
+ "futures",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "toml",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "forge-config"
 version = "0.1.0"
 dependencies = [
@@ -2186,6 +2216,17 @@ dependencies = [
  "either",
  "futures-util",
  "thiserror",
+ "tokio",
+]
+
+[[package]]
+name = "tokio-stream"
+version = "0.1.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32da49809aab5c3bc678af03902d4ccddea2a87d028d86392a4b1560c6906c70"
+dependencies = [
+ "futures-core",
+ "pin-project-lite",
  "tokio",
 ]
 
