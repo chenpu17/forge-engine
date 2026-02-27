@@ -52,6 +52,7 @@ impl AutoSaver {
                 if dirty.swap(false, Ordering::Relaxed) {
                     let session_data = session.read().await.clone();
                     if let Err(e) = manager.update(&session_data).await {
+                        dirty.store(true, Ordering::Relaxed); // restore dirty on failure
                         tracing::error!(error = %e, "Auto-save failed");
                     } else {
                         tracing::debug!("Auto-saved session");
