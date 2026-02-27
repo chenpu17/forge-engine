@@ -79,6 +79,8 @@ pub struct ToolContext {
     pub plan_mode_flag: Arc<AtomicBool>,
     /// Current sub-agent nesting depth (0 = main agent).
     pub subagent_nesting_depth: usize,
+    /// Optional LSP manager for code intelligence tools.
+    pub lsp_manager: Option<Arc<forge_lsp::LspManager>>,
 }
 
 impl ToolContext {
@@ -118,6 +120,7 @@ impl Default for ToolContext {
             bash_readonly: false,
             plan_mode_flag: Arc::new(AtomicBool::new(false)),
             subagent_nesting_depth: 0,
+            lsp_manager: None,
         }
     }
 }
@@ -142,6 +145,10 @@ impl ToolExecutionContext for ToolContext {
 
     fn timeout_secs(&self) -> u64 {
         self.timeout_secs
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 

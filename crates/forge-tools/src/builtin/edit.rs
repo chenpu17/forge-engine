@@ -2,7 +2,7 @@
 
 use crate::description::ToolDescriptions;
 use crate::platform::PlatformPaths;
-use crate::security::{validate_path, validate_write_path};
+use crate::security::validate_write_path;
 use crate::{ConfirmationLevel, ToolError, ToolExecutionContext, ToolOutput};
 use async_trait::async_trait;
 use forge_domain::Tool;

@@ -14,7 +14,10 @@ use serde_json::Value;
 ///
 /// `forge-tools` provides the concrete `ToolContext` that implements this trait
 /// with additional fields (sandbox, LSP, background manager, etc.).
-pub trait ToolExecutionContext: Send + Sync {
+///
+/// The `'static` bound enables downcasting via [`as_any()`](Self::as_any)
+/// for tools that need access to concrete context fields.
+pub trait ToolExecutionContext: Send + Sync + 'static {
     /// Current working directory.
     fn working_dir(&self) -> &Path;
 
@@ -29,6 +32,12 @@ pub trait ToolExecutionContext: Send + Sync {
 
     /// Timeout in seconds for tool execution.
     fn timeout_secs(&self) -> u64;
+
+    /// Downcast to `&dyn Any` for concrete type access.
+    ///
+    /// Tools that need access to concrete context fields (e.g. LSP manager)
+    /// can downcast via this method.
+    fn as_any(&self) -> &dyn std::any::Any;
 }
 
 // ---------------------------------------------------------------------------

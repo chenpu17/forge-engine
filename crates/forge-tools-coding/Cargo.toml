@@ -1,0 +1,26 @@
+[package]
+name = "forge-tools-coding"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Coding-specific tools for Forge — LSP diagnostics, definition, references, and symbol search"
+
+[dependencies]
+forge-domain.workspace = true
+forge-lsp.workspace = true
+forge-tools.workspace = true
+
+async-trait.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+regex.workspace = true
+
+# For directory walking with .gitignore support
+ignore = "0.4"
+
+[dev-dependencies]
+tempfile = "3.10"
+
+[lints]
+workspace = true

@@ -585,6 +585,7 @@ dependencies = [
  "forge-config",
  "forge-domain",
  "forge-infra",
+ "forge-lsp",
  "forge-memory",
  "futures",
  "glob",
@@ -606,6 +607,38 @@ dependencies = [
  "toml",
  "tracing",
  "urlencoding",
+ "uuid",
+]
+
+[[package]]
+name = "forge-tools-coding"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "forge-domain",
+ "forge-lsp",
+ "forge-tools",
+ "ignore",
+ "regex",
+ "serde_json",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
+name = "forge-workflow"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "futures",
+ "regex",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tokio-util",
  "uuid",
 ]
 

@@ -10,6 +10,7 @@ description = "Tool system for Forge — registry, built-in tools, permissions, 
 forge-config.workspace = true
 forge-domain.workspace = true
 forge-infra.workspace = true
+forge-lsp.workspace = true
 forge-memory.workspace = true
 
 tokio.workspace = true
