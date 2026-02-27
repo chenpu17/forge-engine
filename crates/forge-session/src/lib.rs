@@ -104,7 +104,7 @@ impl From<Uuid> for SessionId {
 }
 
 /// Session configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionConfig {
     /// Maximum context tokens
     pub max_context_tokens: usize,
@@ -210,7 +210,11 @@ impl Session {
         if self.metadata.title.is_none() {
             if let Some(msg) = self.messages.iter().find(|m| m.role == MessageRole::User) {
                 let text = msg.text();
-                let title = if text.len() > 50 { format!("{}...", &text[..50]) } else { text };
+                let title = if text.chars().count() > 50 {
+                    format!("{}...", text.chars().take(50).collect::<String>())
+                } else {
+                    text
+                };
                 self.metadata.title = Some(title);
             }
         }
@@ -445,16 +449,7 @@ impl Message {
     /// Get the text content of the message
     #[must_use]
     pub fn text(&self) -> String {
-        match &self.content {
-            MessageContent::Text(s) => s.clone(),
-            MessageContent::Blocks(blocks) => blocks
-                .iter()
-                .filter_map(|b| match b {
-                    ContentBlock::Text { text } => Some(text.clone()),
-                    _ => None,
-                })
-                .collect::<String>(),
-        }
+        self.content.text()
     }
 }
 
@@ -646,7 +641,7 @@ mod tests {
             ]),
             timestamp: Utc::now(),
         };
-        assert_eq!(msg.text(), "Hello World");
+        assert_eq!(msg.text(), "Hello \nWorld");
     }
 
     #[test]

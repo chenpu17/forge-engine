@@ -90,7 +90,7 @@ impl Tool for EnterPlanModeTool {
 
         // Ensure plans directory exists
         if let Some(parent) = plan_file.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| {
+            tokio::fs::create_dir_all(parent).await.map_err(|e| {
                 ToolError::ExecutionFailed(format!("Failed to create plans directory: {e}"))
             })?;
         }

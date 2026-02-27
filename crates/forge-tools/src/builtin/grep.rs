@@ -103,48 +103,55 @@ impl Tool for GrepTool {
         // Build glob matcher if provided
         let glob_matcher = glob_pattern.and_then(|g| glob::Pattern::new(g).ok());
 
-        let mut results: Vec<String> = Vec::new();
+        let working_dir = ctx.working_dir().to_path_buf();
+        let search_path_owned = search_path.clone();
 
-        // Walk directory
-        let walker = WalkBuilder::new(&search_path).hidden(false).git_ignore(true).build();
+        // Run the synchronous directory walk + file read in a blocking thread
+        // to avoid blocking the tokio runtime
+        let results = tokio::task::spawn_blocking(move || {
+            let mut results: Vec<String> = Vec::new();
+            let walker =
+                WalkBuilder::new(&search_path_owned).hidden(false).git_ignore(true).build();
 
-        let working_dir = ctx.working_dir();
-
-        for entry in walker.filter_map(std::result::Result::ok) {
-            if results.len() >= max_results {
-                break;
-            }
-
-            let path = entry.path();
-            if !path.is_file() {
-                continue;
-            }
-
-            // Check glob match
-            if let Some(ref glob) = glob_matcher {
-                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                    if !glob.matches(name) {
-                        continue;
-                    }
-                }
-            }
-
-            // Try to read file (skip binary files)
-            let Ok(content) = std::fs::read_to_string(path) else { continue };
-
-            // Search for matches
-            for (line_num, line) in content.lines().enumerate() {
+            for entry in walker.filter_map(std::result::Result::ok) {
                 if results.len() >= max_results {
                     break;
                 }
 
-                if regex.is_match(line) {
-                    let relative_path =
-                        path.strip_prefix(working_dir).unwrap_or(path).display();
-                    results.push(format!("{}:{}:{}", relative_path, line_num + 1, line));
+                let path = entry.path();
+                if !path.is_file() {
+                    continue;
+                }
+
+                // Check glob match
+                if let Some(ref glob) = glob_matcher {
+                    if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                        if !glob.matches(name) {
+                            continue;
+                        }
+                    }
+                }
+
+                // Try to read file (skip binary files)
+                let Ok(content) = std::fs::read_to_string(path) else { continue };
+
+                // Search for matches
+                for (line_num, line) in content.lines().enumerate() {
+                    if results.len() >= max_results {
+                        break;
+                    }
+
+                    if regex.is_match(line) {
+                        let relative_path =
+                            path.strip_prefix(&working_dir).unwrap_or(path).display();
+                        results.push(format!("{}:{}:{}", relative_path, line_num + 1, line));
+                    }
                 }
             }
-        }
+            results
+        })
+        .await
+        .map_err(|e| ToolError::ExecutionFailed(format!("Search task failed: {e}")))?;
 
         if results.is_empty() {
             Ok(ToolOutput::success("No matches found"))

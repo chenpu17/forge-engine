@@ -274,8 +274,8 @@ impl PermissionManager {
             return PermissionCheck::Allowed;
         }
 
-        // Check if explicitly allowed by pattern
-        if self.is_allowed(tool, params) {
+        // Check if explicitly allowed by pattern (but dangerous commands still need confirmation)
+        if self.is_allowed(tool, params) && !self.is_dangerous(tool, params) {
             return PermissionCheck::Allowed;
         }
 

@@ -28,8 +28,46 @@ pub fn extract_paths_from_command(command: &str) -> Vec<PathBuf> {
 
     let cmd = tokens[0].as_str();
     match cmd {
-        "rm" | "mv" | "cp" | "cat" | "head" | "tail" | "mkdir" | "touch" => {
+        "rm" | "mv" | "cp" | "cat" | "head" | "tail" | "mkdir" | "touch" | "ln" | "install"
+        | "rsync" | "tee" | "dd" | "patch" | "unzip" => {
             // Skip command and options, collect path arguments
+            for token in &tokens[1..] {
+                if !token.starts_with('-') {
+                    let expanded = shellexpand::tilde(token);
+                    paths.push(PathBuf::from(expanded.as_ref()));
+                }
+            }
+        }
+        "sed" => {
+            // `sed -i` modifies files in-place; extract file args after expression
+            let has_inplace = tokens[1..].iter().any(|t| t == "-i" || t.starts_with("-i"));
+            if has_inplace {
+                // Collect non-option args after the expression
+                let mut skip_next = false;
+                let mut found_expr = false;
+                for token in &tokens[1..] {
+                    if skip_next {
+                        skip_next = false;
+                        continue;
+                    }
+                    if token == "-e" || token == "-f" {
+                        skip_next = true;
+                        continue;
+                    }
+                    if token.starts_with('-') {
+                        continue;
+                    }
+                    if !found_expr {
+                        found_expr = true; // first non-option is the expression
+                        continue;
+                    }
+                    let expanded = shellexpand::tilde(token);
+                    paths.push(PathBuf::from(expanded.as_ref()));
+                }
+            }
+        }
+        "tar" => {
+            // `tar -x` extracts; look for -C (target dir) or file args
             for token in &tokens[1..] {
                 if !token.starts_with('-') {
                     let expanded = shellexpand::tilde(token);

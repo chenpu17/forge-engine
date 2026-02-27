@@ -122,7 +122,7 @@ impl EndpointConfig {
 }
 
 /// Authentication configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum AuthConfig {
     /// Bearer token authentication.
@@ -149,6 +149,31 @@ pub enum AuthConfig {
     },
     /// No authentication.
     None,
+}
+
+impl std::fmt::Debug for AuthConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Bearer { .. } => f.debug_struct("Bearer").field("token", &"***").finish(),
+            Self::ApiKey { header_name, .. } => f
+                .debug_struct("ApiKey")
+                .field("header_name", header_name)
+                .field("api_key", &"***")
+                .finish(),
+            Self::Header { headers } => {
+                let redacted: HashMap<&String, &str> =
+                    headers.keys().map(|k| (k, "***")).collect();
+                f.debug_struct("Header")
+                    .field("headers", &redacted)
+                    .finish()
+            }
+            Self::Multi { credentials } => f
+                .debug_struct("Multi")
+                .field("credentials", credentials)
+                .finish(),
+            Self::None => write!(f, "None"),
+        }
+    }
 }
 
 impl AuthConfig {
@@ -353,5 +378,28 @@ mod tests {
         }
         .is_configured());
         assert!(!AuthConfig::None.is_configured());
+    }
+
+    #[test]
+    fn test_auth_debug_redacts_secrets() {
+        let bearer = AuthConfig::Bearer {
+            token: "sk-secret-key-12345".to_string(),
+        };
+        let debug_str = format!("{bearer:?}");
+        assert!(
+            !debug_str.contains("sk-secret-key-12345"),
+            "Debug output must not contain the actual token: {debug_str}"
+        );
+        assert!(debug_str.contains("***"), "Debug output should show redacted marker");
+
+        let api_key = AuthConfig::ApiKey {
+            header_name: "X-Api-Key".to_string(),
+            api_key: "my-secret-api-key".to_string(),
+        };
+        let debug_str = format!("{api_key:?}");
+        assert!(
+            !debug_str.contains("my-secret-api-key"),
+            "Debug output must not contain the actual api_key: {debug_str}"
+        );
     }
 }

@@ -382,9 +382,7 @@ impl WalSessionManager {
         }
 
         // Case 3: Same message count — check if config changed
-        if cached.config.model != updated.config.model
-            || cached.config.max_context_tokens != updated.config.max_context_tokens
-        {
+        if cached.config != updated.config {
             return WalEntry::ConfigUpdated {
                 config: updated.config.clone(),
                 metadata: updated.metadata.clone(),

@@ -51,11 +51,13 @@ impl MemorySettings {
     }
 
     /// Whether reading memory is allowed in the current mode.
+    ///
+    /// `Temporary` mode allows in-session reads (memory is available but not persisted).
     #[must_use]
     pub fn can_read(&self) -> bool {
         matches!(
             self.effective_mode(),
-            MemoryMode::Full | MemoryMode::ReadOnly
+            MemoryMode::Full | MemoryMode::ReadOnly | MemoryMode::Temporary
         )
     }
 
@@ -63,5 +65,32 @@ impl MemorySettings {
     #[must_use]
     pub fn can_write(&self) -> bool {
         matches!(self.effective_mode(), MemoryMode::Full)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_temporary_mode_can_read() {
+        let settings = MemorySettings {
+            global_mode: MemoryMode::Temporary,
+            workspace_mode: None,
+            session_mode: None,
+        };
+        assert!(settings.can_read(), "Temporary mode should allow reads");
+        assert!(!settings.can_write(), "Temporary mode should not allow writes");
+    }
+
+    #[test]
+    fn test_off_mode_cannot_read() {
+        let settings = MemorySettings {
+            global_mode: MemoryMode::Off,
+            workspace_mode: None,
+            session_mode: None,
+        };
+        assert!(!settings.can_read());
+        assert!(!settings.can_write());
     }
 }

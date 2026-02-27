@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 // ---------------------------------------------------------------------------
 
 /// Events emitted during agent execution.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AgentEvent {
     /// Agent started thinking.
@@ -433,5 +433,23 @@ mod tests {
         assert_eq!(json, "\"inprogress\"");
         let parsed: TodoStatus = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(parsed, TodoStatus::InProgress);
+    }
+
+    #[test]
+    fn test_agent_event_serde_roundtrip() {
+        let events = vec![
+            AgentEvent::ThinkingStart,
+            AgentEvent::TextDelta { delta: "hello".to_string() },
+            AgentEvent::Done { summary: Some("done".to_string()) },
+            AgentEvent::Cancelled,
+            AgentEvent::Error { message: "oops".to_string() },
+        ];
+        for event in &events {
+            let json = serde_json::to_string(event).expect("serialize");
+            let parsed: AgentEvent = serde_json::from_str(&json).expect("deserialize");
+            // Verify round-trip produces identical JSON
+            let json2 = serde_json::to_string(&parsed).expect("re-serialize");
+            assert_eq!(json, json2);
+        }
     }
 }

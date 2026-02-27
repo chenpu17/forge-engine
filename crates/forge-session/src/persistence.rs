@@ -66,8 +66,9 @@ impl AutoSaver {
     /// # Errors
     /// Returns error if the session manager fails to persist the session
     pub async fn save_now(&self, session: &Session) -> Result<()> {
+        self.session_manager.update(session).await?;
         self.dirty.store(false, Ordering::Relaxed);
-        self.session_manager.update(session).await
+        Ok(())
     }
 }
 

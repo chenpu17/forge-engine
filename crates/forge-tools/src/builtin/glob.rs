@@ -88,6 +88,13 @@ impl Tool for GlobTool {
 
         let limit = crate::optional_usize(&params, "limit", DEFAULT_MAX_RESULTS);
 
+        // Reject patterns with path traversal components
+        if pattern.contains("..") {
+            return Err(ToolError::InvalidParams(
+                "Pattern must not contain '..' path traversal components".to_string(),
+            ));
+        }
+
         // Build full pattern
         let full_pattern = base_path.join(pattern);
         let pattern_str = full_pattern.to_string_lossy();
