@@ -19,7 +19,7 @@ pub fn build_schema_instruction(schema: &Value) -> String {
     )
 }
 
-/// Build the OpenAI `response_format` value for structured output.
+/// Build the `OpenAI` `response_format` value for structured output.
 pub fn build_openai_response_format(schema: &Value) -> Value {
     serde_json::json!({
         "type": "json_schema",

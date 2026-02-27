@@ -75,10 +75,10 @@ pub struct LlmConfig {
     pub max_tokens: usize,
     /// Temperature (0.0 - 1.0)
     pub temperature: f64,
-    /// System prompt (simple format - use system_blocks for multi-block)
+    /// System prompt (simple format - use `system_blocks` for multi-block)
     pub system_prompt: Option<String>,
     /// System prompt blocks (multi-block format with individual cache control)
-    /// When set, this takes precedence over system_prompt
+    /// When set, this takes precedence over `system_prompt`
     #[serde(default)]
     pub system_blocks: Option<Vec<SystemBlock>>,
     /// Enable prompt caching (Anthropic only)
@@ -100,7 +100,7 @@ pub struct LlmConfig {
 
 impl LlmConfig {
     /// Default stream timeout in seconds (300s = 5 minutes)
-    pub fn default_stream_timeout_secs() -> u64 {
+    pub const fn default_stream_timeout_secs() -> u64 {
         300
     }
 }
@@ -152,12 +152,12 @@ impl SystemBlock {
 
     /// Set cache control
     #[must_use]
-    pub fn with_cache(mut self, cache: CacheControl) -> Self {
+    pub const fn with_cache(mut self, cache: CacheControl) -> Self {
         self.cache_control = Some(cache);
         self
     }
 
-    fn default_block_type() -> SystemBlockType {
+    const fn default_block_type() -> SystemBlockType {
         SystemBlockType::Text
     }
 }

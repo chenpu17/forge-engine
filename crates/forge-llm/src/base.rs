@@ -28,6 +28,8 @@ pub fn create_http_client_with_proxy(
     use_http1_only: bool,
     proxy: Option<&forge_config::ProxyConfig>,
 ) -> reqwest::Client {
+    use forge_config::ProxyMode;
+
     let mut builder = reqwest::Client::builder();
     if use_http1_only {
         builder = builder.http1_only();
@@ -37,16 +39,12 @@ pub fn create_http_client_with_proxy(
     let proxy_config = proxy.unwrap_or(&direct_proxy);
 
     // Configure proxy based on mode
-    use forge_config::ProxyMode;
     match proxy_config.effective_mode() {
         ProxyMode::None => {
             builder = builder.no_proxy();
         }
-        ProxyMode::System => {
-            // reqwest uses system proxy by default, no extra config needed
-        }
-        ProxyMode::Environment => {
-            // reqwest reads HTTP_PROXY/HTTPS_PROXY by default
+        ProxyMode::System | ProxyMode::Environment => {
+            // reqwest uses system proxy / reads HTTP_PROXY/HTTPS_PROXY by default
         }
         ProxyMode::Manual => {
             if let Some(url) = proxy_config.effective_http_url() {
@@ -86,7 +84,7 @@ pub fn extract_auth_token(auth: &forge_config::AuthConfig) -> String {
         forge_config::AuthConfig::Multi { credentials } => credentials
             .iter()
             .find(|c| c.is_configured())
-            .map(|c| extract_auth_token(c))
+            .map(extract_auth_token)
             .unwrap_or_default(),
         forge_config::AuthConfig::Header { .. } => {
             tracing::warn!(

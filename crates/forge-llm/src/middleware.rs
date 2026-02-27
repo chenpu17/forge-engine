@@ -104,14 +104,14 @@ impl InstrumentedProvider {
 
     /// Set the retry configuration.
     #[must_use]
-    pub fn with_retry(mut self, config: RetryConfig) -> Self {
+    pub const fn with_retry(mut self, config: RetryConfig) -> Self {
         self.retry_config = config;
         self
     }
 
     /// Set the per-call timeout.
     #[must_use]
-    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+    pub const fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
         self
     }
@@ -134,7 +134,7 @@ impl InstrumentedProvider {
     }
 
     /// Get a reference to the collected metrics.
-    pub fn metrics(&self) -> &Arc<LlmMetrics> {
+    pub const fn metrics(&self) -> &Arc<LlmMetrics> {
         &self.metrics
     }
 
@@ -156,7 +156,7 @@ impl InstrumentedProvider {
     }
 
     /// Get a reference to the auth rotator, if configured.
-    pub fn auth_rotator(&self) -> Option<&Arc<AuthRotator>> {
+    pub const fn auth_rotator(&self) -> Option<&Arc<AuthRotator>> {
         self.auth_rotator.as_ref()
     }
 
@@ -194,6 +194,7 @@ impl LlmProvider for InstrumentedProvider {
         self.inner.estimate_tokens(text)
     }
 
+    #[allow(clippy::cast_possible_truncation)]
     async fn chat_stream(
         &self,
         messages: &[ChatMessage],
@@ -222,7 +223,7 @@ impl LlmProvider for InstrumentedProvider {
 
 impl InstrumentedProvider {
     /// Inner implementation that runs inside the tracing span.
-    #[allow(clippy::too_many_lines)]
+    #[allow(clippy::too_many_lines, clippy::cast_possible_truncation)]
     async fn chat_stream_inner(
         &self,
         messages: &[ChatMessage],

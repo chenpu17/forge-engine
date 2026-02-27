@@ -7,7 +7,7 @@ use serde_json::Value;
 /// SSE event parsed from stream
 #[derive(Debug, Clone)]
 pub struct SseEvent {
-    /// Event type (e.g., "message_start", "content_block_delta")
+    /// Event type (e.g., `message_start`, `content_block_delta`)
     pub event_type: Option<String>,
     /// Event data (JSON string)
     pub data: String,
@@ -20,7 +20,7 @@ pub struct SseProcessor {
 
 impl SseProcessor {
     /// Create a new SSE processor
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self { buffer: String::new() }
     }
 
@@ -43,6 +43,7 @@ impl SseProcessor {
         events
     }
 
+    #[allow(clippy::unused_self)]
     fn parse_event(&self, event_str: &str) -> Option<SseEvent> {
         let mut event_type = None;
         let mut data = String::new();
@@ -89,7 +90,7 @@ pub struct Usage {
 
 impl Usage {
     /// Total tokens used
-    pub fn total(&self) -> usize {
+    pub const fn total(&self) -> usize {
         self.input_tokens + self.output_tokens
     }
 }
@@ -117,7 +118,7 @@ pub struct ToolCallParser {
 
 impl ToolCallParser {
     /// Create a new tool call parser
-    pub fn new(id: String, name: String) -> Self {
+    pub const fn new(id: String, name: String) -> Self {
         Self { tool_id: id, tool_name: name, input_buffer: String::new() }
     }
 

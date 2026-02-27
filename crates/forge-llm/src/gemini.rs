@@ -1,7 +1,7 @@
 //! Google Gemini API adapter
 //!
-//! Implements the LlmProvider trait for Google's Gemini models.
-//! Gemini uses a different API format from OpenAI (functionDeclarations vs tools,
+//! Implements the `LlmProvider` trait for Google's Gemini models.
+//! Gemini uses a different API format from `OpenAI` (`functionDeclarations` vs tools,
 //! different SSE format), requiring a native implementation.
 
 use crate::error::LlmError;
@@ -65,10 +65,11 @@ impl GeminiProvider {
     /// Build a redacted URL for logging (hides the API key)
     fn build_url_redacted(&self, model: &str) -> String {
         let base = self.base_url.trim_end_matches('/');
-        format!("{}/v1beta/models/{}:streamGenerateContent?alt=sse&key=REDACTED", base, model)
+        format!("{base}/v1beta/models/{model}:streamGenerateContent?alt=sse&key=REDACTED")
     }
 
-    /// Convert ChatMessages to Gemini `contents` format
+    /// Convert `ChatMessages` to Gemini `contents` format
+    #[allow(clippy::unused_self)]
     fn convert_messages(&self, messages: &[ChatMessage]) -> Vec<Value> {
         // Pre-build a tool_use_id → function_name lookup across all messages.
         // This is needed because ToolResult (in a user message) references a
@@ -77,7 +78,7 @@ impl GeminiProvider {
             .iter()
             .flat_map(|m| match &m.content {
                 MessageContent::Blocks(blocks) => blocks.as_slice(),
-                _ => &[],
+                MessageContent::Text(_) => &[],
             })
             .filter_map(|b| {
                 if let ContentBlock::ToolUse { id, name, .. } = b {
@@ -143,7 +144,8 @@ impl GeminiProvider {
             .collect()
     }
 
-    /// Convert ToolDef to Gemini `functionDeclarations` format
+    /// Convert `ToolDef` to Gemini `functionDeclarations` format
+    #[allow(clippy::unused_self)]
     fn convert_tools(&self, tools: &[ToolDef]) -> Value {
         let declarations: Vec<Value> = tools
             .iter()
@@ -164,10 +166,12 @@ impl GeminiProvider {
 
 #[async_trait]
 impl LlmProvider for GeminiProvider {
+    #[allow(clippy::unnecessary_literal_bound)]
     fn id(&self) -> &str {
         "gemini"
     }
 
+    #[allow(clippy::unnecessary_literal_bound)]
     fn name(&self) -> &str {
         "Google Gemini"
     }
@@ -390,10 +394,9 @@ impl LlmProvider for GeminiProvider {
                         break;
                     }
                     Err(_) => {
-                        tracing::warn!("Gemini stream read timeout after {} seconds", stream_timeout_secs);
+                        tracing::warn!("Gemini stream read timeout after {stream_timeout_secs} seconds");
                         yield Err(LlmError::StreamInterrupted(format!(
-                            "Stream read timeout after {} seconds",
-                            stream_timeout_secs
+                            "Stream read timeout after {stream_timeout_secs} seconds"
                         )));
                         break;
                     }

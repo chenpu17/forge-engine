@@ -28,7 +28,7 @@ struct CredentialState {
 }
 
 impl CredentialState {
-    fn new(auth: AuthConfig) -> Self {
+    const fn new(auth: AuthConfig) -> Self {
         Self {
             auth,
             successes: AtomicU64::new(0),
@@ -40,10 +40,7 @@ impl CredentialState {
     /// Whether this credential is currently available (not in cooldown).
     fn is_available(&self) -> bool {
         let guard = self.cooldown_until.read();
-        match *guard {
-            Some(until) => Instant::now() >= until,
-            None => true,
-        }
+        guard.map_or(true, |until| Instant::now() >= until)
     }
 
     fn record_success(&self) {
@@ -98,7 +95,7 @@ impl AuthRotator {
 
     /// Override the default cooldown duration.
     #[must_use]
-    pub fn with_cooldown(mut self, duration: Duration) -> Self {
+    pub const fn with_cooldown(mut self, duration: Duration) -> Self {
         self.cooldown = duration;
         self
     }

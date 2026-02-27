@@ -28,7 +28,7 @@ pub struct ModelInfo {
 }
 
 impl ModelInfo {
-    /// Create a new ModelInfo with basic settings
+    /// Create a new `ModelInfo` with basic settings
     pub fn new(id: impl Into<String>, name: impl Into<String>, context_window: usize) -> Self {
         Self {
             id: id.into(),
@@ -42,21 +42,21 @@ impl ModelInfo {
 
     /// Set max output tokens
     #[must_use]
-    pub fn with_max_output(mut self, max_output: usize) -> Self {
+    pub const fn with_max_output(mut self, max_output: usize) -> Self {
         self.max_output_tokens = max_output;
         self
     }
 
     /// Set vision support
     #[must_use]
-    pub fn with_vision(mut self, supports: bool) -> Self {
+    pub const fn with_vision(mut self, supports: bool) -> Self {
         self.supports_vision = supports;
         self
     }
 
     /// Set tool support
     #[must_use]
-    pub fn with_tools(mut self, supports: bool) -> Self {
+    pub const fn with_tools(mut self, supports: bool) -> Self {
         self.supports_tools = supports;
         self
     }

@@ -1,8 +1,8 @@
 //! Ollama API adapter
 //!
-//! Implements the LlmProvider trait for Ollama local models.
-//! Ollama provides an OpenAI-compatible API, so this is largely a wrapper
-//! around the OpenAI provider with Ollama-specific defaults and model discovery.
+//! Implements the `LlmProvider` trait for Ollama local models.
+//! Ollama provides an `OpenAI`-compatible API, so this is largely a wrapper
+//! around the `OpenAI` provider with Ollama-specific defaults and model discovery.
 
 use crate::error::LlmError;
 use crate::{
@@ -35,7 +35,7 @@ impl OllamaProvider {
     pub fn with_base_url(base_url: impl Into<String>) -> Self {
         let base_url = base_url.into();
         // Ollama doesn't require an API key, but OpenAI provider expects one
-        let inner = OpenAIProvider::new("ollama").with_base_url(format!("{}/v1", base_url));
+        let inner = OpenAIProvider::new("ollama").with_base_url(format!("{base_url}/v1"));
 
         Self { inner, base_url, cached_models: Vec::new() }
     }
@@ -49,10 +49,7 @@ impl OllamaProvider {
             .unwrap_or_else(|_| reqwest::Client::new());
         let url = format!("{}/api/tags", self.base_url);
 
-        match client.get(&url).send().await {
-            Ok(response) => response.status().is_success(),
-            Err(_) => false,
-        }
+        client.get(&url).send().await.is_ok_and(|r| r.status().is_success())
     }
 
     /// Fetch available models from Ollama
@@ -84,7 +81,7 @@ impl OllamaProvider {
             })
             .collect();
 
-        self.cached_models = models.clone();
+        self.cached_models.clone_from(&models);
         Ok(models)
     }
 
@@ -102,10 +99,12 @@ impl Default for OllamaProvider {
 
 #[async_trait]
 impl LlmProvider for OllamaProvider {
+    #[allow(clippy::unnecessary_literal_bound)]
     fn id(&self) -> &str {
         "ollama"
     }
 
+    #[allow(clippy::unnecessary_literal_bound)]
     fn name(&self) -> &str {
         "Ollama"
     }
@@ -165,15 +164,15 @@ struct OllamaModel {
 fn estimate_context_window(model: &str) -> usize {
     let model_lower = model.to_lowercase();
 
-    if model_lower.contains("llama3") || model_lower.contains("llama-3") {
+    if model_lower.contains("llama3")
+        || model_lower.contains("llama-3")
+        || model_lower.contains("deepseek")
+    {
         128_000
-    } else if model_lower.contains("deepseek") {
-        128_000
-    } else if model_lower.contains("qwen") {
-        32_000
-    } else if model_lower.contains("mixtral") {
-        32_000
-    } else if model_lower.contains("mistral") {
+    } else if model_lower.contains("qwen")
+        || model_lower.contains("mixtral")
+        || model_lower.contains("mistral")
+    {
         32_000
     } else if model_lower.contains("codellama") {
         16_000

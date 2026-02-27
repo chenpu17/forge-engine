@@ -1,6 +1,6 @@
 //! Anthropic API adapter
 //!
-//! Implements the LlmProvider trait for Anthropic's Claude models,
+//! Implements the `LlmProvider` trait for Anthropic's Claude models,
 //! with support for streaming responses and tool use.
 
 use crate::error::LlmError;
@@ -105,6 +105,7 @@ impl AnthropicProvider {
     }
 
     /// Convert `ChatMessage` to Anthropic API format
+    #[allow(clippy::unused_self)]
     fn convert_messages(&self, messages: &[ChatMessage]) -> Vec<Value> {
         messages
             .iter()
@@ -153,6 +154,7 @@ impl AnthropicProvider {
     }
 
     /// Convert `ToolDef` to Anthropic API format
+    #[allow(clippy::unused_self)]
     fn convert_tools(&self, tools: &[ToolDef], enable_cache: bool) -> Vec<Value> {
         let len = tools.len();
         tools
@@ -174,6 +176,7 @@ impl AnthropicProvider {
     }
 
     /// Convert system blocks to Anthropic API format
+    #[allow(clippy::unused_self)]
     fn convert_system_blocks(&self, blocks: &[SystemBlock]) -> Vec<Value> {
         blocks
             .iter()
@@ -224,10 +227,12 @@ impl AnthropicProvider {
 
 #[async_trait]
 impl LlmProvider for AnthropicProvider {
+    #[allow(clippy::unnecessary_literal_bound)]
     fn id(&self) -> &str {
         "anthropic"
     }
 
+    #[allow(clippy::unnecessary_literal_bound)]
     fn name(&self) -> &str {
         "Anthropic"
     }
@@ -250,7 +255,7 @@ impl LlmProvider for AnthropicProvider {
         ]
     }
 
-    #[allow(clippy::too_many_lines)]
+    #[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
     #[tracing::instrument(name = "llm_call", skip_all, fields(provider = "anthropic", model = %config.model))]
     async fn chat_stream(
         &self,
@@ -270,7 +275,7 @@ impl LlmProvider for AnthropicProvider {
             format!("{}/v1/messages", self.base_url)
         };
         let enable_cache = config.enable_cache;
-        let thinking_enabled = config.thinking.as_ref().map(|t| t.enabled).unwrap_or(false);
+        let thinking_enabled = config.thinking.as_ref().is_some_and(|t| t.enabled);
 
         // Build request body
         let mut body = json!({
@@ -383,7 +388,7 @@ impl LlmProvider for AnthropicProvider {
                                             (byte_stream, sse, tool_parser, thinking_active),
                                         ));
                                     }
-                                    Ok(None) => continue,
+                                    Ok(None) => {},
                                     Err(e) => {
                                         return Some((
                                             Err(e),
@@ -403,13 +408,11 @@ impl LlmProvider for AnthropicProvider {
                         Err(_) => {
                             // Timeout - no data received within configured timeout
                             tracing::warn!(
-                                "Stream read timeout after {} seconds",
-                                stream_timeout_secs
+                                "Stream read timeout after {stream_timeout_secs} seconds"
                             );
                             return Some((
                                 Err(LlmError::StreamInterrupted(format!(
-                                    "Stream read timeout after {} seconds",
-                                    stream_timeout_secs
+                                    "Stream read timeout after {stream_timeout_secs} seconds"
                                 ))),
                                 (byte_stream, sse, tool_parser, thinking_active),
                             ));
@@ -474,6 +477,7 @@ enum ContentBlockInfo {
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type")]
+#[allow(clippy::enum_variant_names)]
 enum DeltaInfo {
     #[serde(rename = "text_delta")]
     TextDelta { text: String },
@@ -490,6 +494,7 @@ struct MessageDeltaInfo {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[allow(clippy::struct_field_names)]
 struct UsageInfo {
     input_tokens: Option<usize>,
     output_tokens: Option<usize>,
@@ -521,7 +526,9 @@ fn parse_sse_event(
     let event: AnthropicEvent = serde_json::from_str(data)?;
 
     match event {
-        AnthropicEvent::MessageStart { .. } => Ok(None),
+        AnthropicEvent::MessageStart { .. }
+        | AnthropicEvent::MessageStop
+        | AnthropicEvent::Ping => Ok(None),
         AnthropicEvent::ContentBlockStart { content_block, .. } => match content_block {
             ContentBlockInfo::Text { .. } => Ok(None),
             ContentBlockInfo::ToolUse { id, name } => {
@@ -536,13 +543,11 @@ fn parse_sse_event(
         AnthropicEvent::ContentBlockDelta { delta, .. } => match delta {
             DeltaInfo::TextDelta { text } => Ok(Some(LlmEvent::TextDelta(text))),
             DeltaInfo::InputJsonDelta { partial_json } => {
-                if let Some(ref mut parser) = tool_parser {
+                tool_parser.as_mut().map_or(Ok(None), |parser| {
                     let id = parser.id().to_string();
                     parser.append(&partial_json);
                     Ok(Some(LlmEvent::ToolUseInputDelta { id, delta: partial_json }))
-                } else {
-                    Ok(None)
-                }
+                })
             }
             DeltaInfo::ThinkingDelta { thinking } => Ok(Some(LlmEvent::ThinkingDelta(thinking))),
         },
@@ -555,7 +560,7 @@ fn parse_sse_event(
                 return Ok(Some(LlmEvent::ThinkingEnd));
             }
             // Check if we were in a tool use block
-            if let Some(parser) = tool_parser.take() {
+            tool_parser.take().map_or(Ok(None), |parser| {
                 let id = parser.id().to_string();
                 match parser.finish() {
                     Ok(tool_call) => Ok(Some(LlmEvent::ToolUseEnd {
@@ -565,9 +570,7 @@ fn parse_sse_event(
                     })),
                     Err(e) => Ok(Some(LlmEvent::Error(e.to_string()))),
                 }
-            } else {
-                Ok(None)
-            }
+            })
         }
         AnthropicEvent::MessageDelta { usage, .. } => {
             let usage_data = usage.map_or_else(
@@ -586,8 +589,6 @@ fn parse_sse_event(
             );
             Ok(Some(LlmEvent::MessageEnd { usage: usage_data }))
         }
-        AnthropicEvent::MessageStop => Ok(None),
-        AnthropicEvent::Ping => Ok(None),
         AnthropicEvent::Error { error } => {
             Ok(Some(LlmEvent::Error(format!("{}: {}", error.error_type, error.message))))
         }

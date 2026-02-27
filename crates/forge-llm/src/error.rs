@@ -66,70 +66,70 @@ pub enum LlmError {
 
 impl LlmError {
     /// Check if this is an authentication error (401/403).
-    pub fn is_auth_error(&self) -> bool {
+    pub const fn is_auth_error(&self) -> bool {
         matches!(
             self,
-            LlmError::AuthenticationFailed(_)
-                | LlmError::ApiError { status: 401, .. }
-                | LlmError::ApiError { status: 403, .. }
+            Self::AuthenticationFailed(_)
+                | Self::ApiError { status: 401, .. }
+                | Self::ApiError { status: 403, .. }
         )
     }
 
     /// Check if this is a rate-limit error (429).
-    pub fn is_rate_limited(&self) -> bool {
-        matches!(self, LlmError::RateLimited { .. } | LlmError::ApiError { status: 429, .. })
+    pub const fn is_rate_limited(&self) -> bool {
+        matches!(self, Self::RateLimited { .. } | Self::ApiError { status: 429, .. })
     }
 
     /// Check if the error is retryable
-    pub fn is_retryable(&self) -> bool {
+    pub const fn is_retryable(&self) -> bool {
         matches!(
             self,
-            LlmError::RateLimited { .. }
-                | LlmError::NetworkError(_)
-                | LlmError::Timeout(_)
-                | LlmError::StreamInterrupted(_)
-                | LlmError::ApiError { status: 500..=599, .. }
-                | LlmError::ApiError { status: 429, .. }
+            Self::RateLimited { .. }
+                | Self::NetworkError(_)
+                | Self::Timeout(_)
+                | Self::StreamInterrupted(_)
+                | Self::ApiError { status: 500..=599, .. }
+                | Self::ApiError { status: 429, .. }
         )
     }
 
     /// Get suggested retry delay
-    pub fn retry_delay(&self) -> Option<Duration> {
+    pub const fn retry_delay(&self) -> Option<Duration> {
         match self {
-            LlmError::RateLimited { retry_after_secs } => {
+            Self::RateLimited { retry_after_secs } => {
                 Some(Duration::from_secs(*retry_after_secs))
             }
-            LlmError::ApiError { status: 429, .. } => Some(Duration::from_secs(5)),
-            LlmError::NetworkError(_) | LlmError::Timeout(_) => Some(Duration::from_secs(1)),
-            LlmError::StreamInterrupted(_) => Some(Duration::from_millis(500)),
-            LlmError::ApiError { status: 500..=599, .. } => Some(Duration::from_secs(2)),
+            Self::ApiError { status: 429, .. } => Some(Duration::from_secs(5)),
+            Self::NetworkError(_) | Self::Timeout(_) => Some(Duration::from_secs(1)),
+            Self::StreamInterrupted(_) => Some(Duration::from_millis(500)),
+            Self::ApiError { status: 500..=599, .. } => Some(Duration::from_secs(2)),
             _ => None,
         }
     }
 
     /// Create from reqwest error
-    pub fn from_reqwest(e: reqwest::Error) -> Self {
+    pub fn from_reqwest(e: &reqwest::Error) -> Self {
         if e.is_timeout() {
-            LlmError::Timeout(30)
+            Self::Timeout(30)
         } else if e.is_connect() {
-            LlmError::NetworkError(format!("Connection failed: {e}"))
+            Self::NetworkError(format!("Connection failed: {e}"))
         } else if let Some(status) = e.status() {
-            LlmError::ApiError { status: status.as_u16(), message: e.to_string() }
+            Self::ApiError { status: status.as_u16(), message: e.to_string() }
         } else {
-            LlmError::NetworkError(e.to_string())
+            Self::NetworkError(e.to_string())
         }
     }
 }
 
 impl From<reqwest::Error> for LlmError {
     fn from(e: reqwest::Error) -> Self {
-        LlmError::from_reqwest(e)
+        Self::from_reqwest(&e)
     }
 }
 
 impl From<serde_json::Error> for LlmError {
     fn from(e: serde_json::Error) -> Self {
-        LlmError::ParseError(e.to_string())
+        Self::ParseError(e.to_string())
     }
 }
 

@@ -1,4 +1,4 @@
-//! Provider Factory — config-driven LlmProvider instantiation
+//! Provider Factory — config-driven `LlmProvider` instantiation
 //!
 //! Bridges `forge_config::ModelConfig` to runtime `LlmProvider` instances.
 

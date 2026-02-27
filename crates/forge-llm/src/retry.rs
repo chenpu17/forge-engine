@@ -39,7 +39,7 @@ pub struct RetryHandler {
 
 impl RetryHandler {
     /// Create a new retry handler
-    pub fn new(config: RetryConfig) -> Self {
+    pub const fn new(config: RetryConfig) -> Self {
         Self { config }
     }
 

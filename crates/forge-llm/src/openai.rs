@@ -1,8 +1,8 @@
-//! OpenAI API adapter
+//! `OpenAI` API adapter
 //!
-//! Implements the LlmProvider trait for OpenAI's GPT models,
+//! Implements the `LlmProvider` trait for `OpenAI`'s GPT models,
 //! with support for streaming responses and tool use.
-//! Also compatible with OpenAI-compatible APIs (e.g., local LLMs, Azure).
+//! Also compatible with `OpenAI`-compatible APIs (e.g., local LLMs, Azure).
 
 use crate::error::LlmError;
 use crate::{
@@ -15,7 +15,7 @@ use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-/// OpenAI API client
+/// `OpenAI` API client
 pub struct OpenAIProvider {
     api_key: String,
     base_url: String,
@@ -23,7 +23,7 @@ pub struct OpenAIProvider {
 }
 
 impl OpenAIProvider {
-    /// Create a new OpenAI provider
+    /// Create a new `OpenAI` provider
     pub fn new(api_key: impl Into<String>) -> Self {
         Self {
             api_key: api_key.into(),
@@ -32,7 +32,7 @@ impl OpenAIProvider {
         }
     }
 
-    /// Create a new OpenAI provider from an `AuthConfig`
+    /// Create a new `OpenAI` provider from an `AuthConfig`
     ///
     /// Extracts the API key/token from the auth config. For `AuthConfig::None`,
     /// uses an empty string (useful for local APIs that don't require auth).
@@ -66,7 +66,8 @@ impl OpenAIProvider {
         headers
     }
 
-    /// Convert ChatMessage to OpenAI API format
+    /// Convert `ChatMessage` to `OpenAI` API format
+    #[allow(clippy::unused_self)]
     fn convert_messages(&self, messages: &[ChatMessage], system: Option<&str>) -> Vec<Value> {
         let mut result = Vec::new();
 
@@ -166,7 +167,8 @@ impl OpenAIProvider {
         result
     }
 
-    /// Convert ToolDef to OpenAI API format
+    /// Convert `ToolDef` to `OpenAI` API format
+    #[allow(clippy::unused_self)]
     fn convert_tools(&self, tools: &[ToolDef]) -> Vec<Value> {
         tools
             .iter()
@@ -184,7 +186,7 @@ impl OpenAIProvider {
     }
 }
 
-/// OpenAI streaming response chunk
+/// `OpenAI` streaming response chunk
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
 struct StreamChunk {
@@ -202,7 +204,7 @@ struct StreamChoice {
 #[derive(Debug, Deserialize)]
 struct DeltaContent {
     content: Option<String>,
-    /// GLM models use reasoning_content for chain-of-thought reasoning
+    /// GLM models use `reasoning_content` for chain-of-thought reasoning
     reasoning_content: Option<String>,
     tool_calls: Option<Vec<ToolCallDelta>>,
 }
@@ -271,10 +273,12 @@ struct ToolCallState {
 
 #[async_trait]
 impl LlmProvider for OpenAIProvider {
+    #[allow(clippy::unnecessary_literal_bound)]
     fn id(&self) -> &str {
         "openai"
     }
 
+    #[allow(clippy::unnecessary_literal_bound)]
     fn name(&self) -> &str {
         "OpenAI"
     }
@@ -295,7 +299,7 @@ impl LlmProvider for OpenAIProvider {
         ]
     }
 
-    #[allow(clippy::too_many_lines)]
+    #[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
     #[tracing::instrument(name = "llm_call", skip_all, fields(provider = "openai", model = %config.model))]
     async fn chat_stream(
         &self,
@@ -322,7 +326,7 @@ impl LlmProvider for OpenAIProvider {
         // Build request body - base parameters
         let mut body = json!({
             "model": config.model,
-            "messages": self.convert_messages(&messages, config.system_prompt.as_deref()),
+            "messages": self.convert_messages(messages, config.system_prompt.as_deref()),
             "stream": true
         });
 
@@ -469,7 +473,6 @@ impl LlmProvider for OpenAIProvider {
         // State for parsing <think> tags (MiniMax-M2 style thinking)
         let mut in_think_block = false;
         let mut in_reasoning_content_mode = false; // GLM reasoning_content mode (vs MiniMax <think> tag mode)
-        let mut think_buffer = String::new();
         let mut text_buffer = String::new();
         let mut thinking_started = false;
         let stream_timeout_secs = config.stream_timeout_secs;
@@ -572,10 +575,9 @@ impl LlmProvider for OpenAIProvider {
                             }).unwrap_or_default();
                             yield Ok(LlmEvent::MessageEnd { usage });
                             continue;
-                        } else {
-                            tracing::warn!("Failed to parse non-SSE response: {}", line);
-                            continue;
                         }
+                        tracing::warn!("Failed to parse non-SSE response: {}", line);
+                        continue;
                     } else {
                         // Unknown format, skip
                         tracing::trace!("Skipping unknown line format: {}", line);
@@ -620,7 +622,6 @@ impl LlmProvider for OpenAIProvider {
                                             in_reasoning_content_mode = true; // Mark as GLM mode
                                             yield Ok(LlmEvent::ThinkingStart);
                                         }
-                                        think_buffer.push_str(reasoning);
                                         yield Ok(LlmEvent::ThinkingDelta(reasoning.clone()));
                                     }
                                 }
@@ -649,7 +650,6 @@ impl LlmProvider for OpenAIProvider {
                                                     // Emit thinking content before the tag
                                                     let thinking_content = text_buffer[..end_pos].to_string();
                                                     if !thinking_content.is_empty() {
-                                                        think_buffer.push_str(&thinking_content);
                                                         yield Ok(LlmEvent::ThinkingDelta(thinking_content));
                                                     }
                                                     // Emit ThinkingEnd and remove processed content
@@ -660,7 +660,6 @@ impl LlmProvider for OpenAIProvider {
                                                     // No closing tag yet, emit all as thinking
                                                     if !text_buffer.is_empty() {
                                                         let content = std::mem::take(&mut text_buffer);
-                                                        think_buffer.push_str(&content);
                                                         yield Ok(LlmEvent::ThinkingDelta(content));
                                                     }
                                                     break;
@@ -730,8 +729,13 @@ impl LlmProvider for OpenAIProvider {
                                         if let Some(func) = tc_delta.function {
                                             if let Some(name) = func.name {
                                                 // Skip empty tool names - LLM error
-                                                if !name.is_empty() {
-                                                    state.name = name.clone();
+                                                if name.is_empty() {
+                                                    tracing::warn!(
+                                                        "LLM returned empty tool name for call_id={}, skipping",
+                                                        state.id
+                                                    );
+                                                } else {
+                                                    state.name.clone_from(&name);
                                                     if !state.started {
                                                         state.started = true;
                                                         yield Ok(LlmEvent::ToolUseStart {
@@ -739,11 +743,6 @@ impl LlmProvider for OpenAIProvider {
                                                             name,
                                                         });
                                                     }
-                                                } else {
-                                                    tracing::warn!(
-                                                        "LLM returned empty tool name for call_id={}, skipping",
-                                                        state.id
-                                                    );
                                                 }
                                             }
                                             if let Some(args) = func.arguments {
@@ -844,9 +843,9 @@ impl LlmProvider for OpenAIProvider {
                         break;
                     }
                     Err(_) => {
-                        tracing::warn!("Stream read timeout after {} seconds", stream_timeout_secs);
+                        tracing::warn!("Stream read timeout after {stream_timeout_secs} seconds");
                         yield Err(LlmError::StreamInterrupted(format!(
-                            "Stream read timeout after {} seconds", stream_timeout_secs
+                            "Stream read timeout after {stream_timeout_secs} seconds"
                         )));
                         break;
                     }
