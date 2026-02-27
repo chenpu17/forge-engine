@@ -538,8 +538,17 @@ impl<E: NodeExecutor> WorkflowExecutor<E> {
         self.state.status = WorkflowStatus::Running;
 
         // 设置当前节点为入口点
-        self.state.current_node =
-            self.graph.entry_point().map(std::string::ToString::to_string).unwrap_or_default();
+        if let Some(entry) = self.graph.entry_point() {
+            self.state.current_node = entry.to_string();
+        } else {
+            let error = "No entry point found in workflow graph".to_string();
+            self.state.status = WorkflowStatus::Failed {
+                error: error.clone(),
+                node: String::new(),
+            };
+            sink.emit(WorkflowEvent::Failed { error, failed_node: None });
+            return;
+        }
 
         sink.emit(WorkflowEvent::Started {
             workflow_id: self.graph.id().to_string(),
@@ -616,8 +625,11 @@ impl<E: NodeExecutor> WorkflowExecutor<E> {
 
         // 获取节点
         let node = if let Some(n) = self.graph.get_node(&node_id) { n.clone() } else {
+            let error = format!("Node not found: {node_id}");
+            self.state.status =
+                WorkflowStatus::Failed { error: error.clone(), node: node_id.clone() };
             sink.emit(WorkflowEvent::Failed {
-                error: format!("Node not found: {node_id}"),
+                error,
                 failed_node: Some(node_id),
             });
             return;

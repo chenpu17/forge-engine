@@ -522,14 +522,26 @@ impl OAuth21Client {
         let json = serde_json::to_string_pretty(data)
             .map_err(|e| OAuthError::StorageError(format!("Failed to serialize tokens: {e}")))?;
 
-        std::fs::write(&path, json)
-            .map_err(|e| OAuthError::StorageError(format!("Failed to write token file: {e}")))?;
-
-        // Set restrictive permissions on Unix
+        // Write with restrictive permissions atomically on Unix
         #[cfg(unix)]
         {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+            use std::io::Write;
+            use std::os::unix::fs::OpenOptionsExt;
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .mode(0o600)
+                .open(&path)
+                .map_err(|e| OAuthError::StorageError(format!("Failed to write token file: {e}")))?;
+            file.write_all(json.as_bytes())
+                .map_err(|e| OAuthError::StorageError(format!("Failed to write token file: {e}")))?;
+        }
+
+        #[cfg(not(unix))]
+        {
+            std::fs::write(&path, json)
+                .map_err(|e| OAuthError::StorageError(format!("Failed to write token file: {e}")))?;
         }
 
         debug!("Saved OAuth tokens for server '{}' to {:?}", self.server_name, path);
@@ -551,11 +563,17 @@ impl OAuth21Client {
 
     /// Get the token storage path.
     fn token_path(&self) -> PathBuf {
+        // Sanitize server_name to prevent path traversal
+        let safe_name: String = self
+            .server_name
+            .chars()
+            .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+            .collect();
         dirs::home_dir()
             .unwrap_or_else(|| PathBuf::from("."))
             .join(".forge")
             .join("mcp_tokens")
-            .join(format!("{}.json", self.server_name))
+            .join(format!("{safe_name}.json"))
     }
 
     /// Convert a token response to token data.

@@ -80,9 +80,10 @@ impl ExpressionEvaluator {
             return Some(serde_json::json!(n));
         }
 
-        // 字符串（带引号）
-        if (expr.starts_with('"') && expr.ends_with('"'))
-            || (expr.starts_with('\'') && expr.ends_with('\''))
+        // 字符串（带引号）— 至少 2 个字符且首尾匹配
+        if expr.len() >= 2
+            && ((expr.starts_with('"') && expr.ends_with('"'))
+                || (expr.starts_with('\'') && expr.ends_with('\'')))
         {
             let s = &expr[1..expr.len() - 1];
             return Some(serde_json::Value::String(s.to_string()));
