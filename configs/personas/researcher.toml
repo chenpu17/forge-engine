@@ -1,0 +1,14 @@
+[persona]
+name = "researcher"
+display_name = "Deep Research"
+description = "Technical research and analysis"
+system_prompt_file = "prompts/personas/researcher.md"
+
+[tools]
+include = ["read", "glob", "grep", "web_search", "web_fetch"]
+
+[subagents]
+enabled = ["research", "explore"]
+
+[options]
+max_iterations = 50

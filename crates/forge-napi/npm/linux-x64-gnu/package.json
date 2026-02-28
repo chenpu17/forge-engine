@@ -1,0 +1,17 @@
+{
+  "name": "@anthropic/forge-sdk-linux-x64-gnu",
+  "version": "0.1.0",
+  "os": ["linux"],
+  "cpu": ["x64"],
+  "main": "forge-sdk.linux-x64-gnu.node",
+  "files": ["forge-sdk.linux-x64-gnu.node"],
+  "description": "Forge Engine SDK native binding for Linux x64 (glibc)",
+  "license": "MIT",
+  "engines": {
+    "node": ">= 18"
+  },
+  "libc": ["glibc"],
+  "publishConfig": {
+    "access": "public"
+  }
+}

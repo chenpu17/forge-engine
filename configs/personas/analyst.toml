@@ -1,0 +1,11 @@
+[persona]
+name = "analyst"
+display_name = "Data Analyst"
+description = "Data analysis and report generation"
+system_prompt_file = "prompts/personas/analyst.md"
+
+[tools]
+include = ["read", "glob", "grep", "bash", "write", "web_search"]
+
+[subagents]
+enabled = ["explore", "analyst"]

@@ -1,0 +1,38 @@
+[package]
+name = "forge-napi"
+version.workspace = true
+edition.workspace = true
+description = "NAPI bindings for Forge SDK - enables Node.js to call Rust SDK"
+authors.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+napi = { version = "2", features = ["async", "serde-json", "napi9", "tokio_rt"] }
+napi-derive = "2"
+
+forge-sdk = { path = "../forge-sdk" }
+forge-agent = { path = "../forge-agent" }
+forge-config = { path = "../forge-config" }
+forge-session = { path = "../forge-session" }
+forge-tools = { path = "../forge-tools" }
+forge-infra = { path = "../forge-infra" }
+forge-workflow = { path = "../forge-workflow" }
+
+tokio.workspace = true
+tokio-stream.workspace = true
+futures.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+async-trait.workspace = true
+tracing.workspace = true
+chrono.workspace = true
+
+[build-dependencies]
+napi-build = "2.1.3"
+
+[lints]
+workspace = true

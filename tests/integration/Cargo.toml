@@ -1,0 +1,19 @@
+[package]
+name = "forge-integration-tests"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+forge-domain = { path = "../../crates/forge-domain" }
+forge-agent = { path = "../../crates/forge-agent" }
+forge-tools = { path = "../../crates/forge-tools" }
+forge-tools-coding = { path = "../../crates/forge-tools-coding" }
+forge-sdk = { path = "../../crates/forge-sdk" }
+forge-config = { path = "../../crates/forge-config" }
+forge-prompt = { path = "../../crates/forge-prompt" }
+forge-llm = { path = "../../crates/forge-llm" }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tempfile = { workspace = true }

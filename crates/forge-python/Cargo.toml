@@ -1,0 +1,17 @@
+[package]
+name = "forge-python"
+version.workspace = true
+edition.workspace = true
+description = "Python bindings for Forge SDK"
+license.workspace = true
+
+[lib]
+name = "forge_python"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.22", features = ["extension-module"] }
+forge-sdk = { path = "../forge-sdk" }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

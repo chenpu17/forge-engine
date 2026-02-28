@@ -1,0 +1,62 @@
+{
+  "name": "@anthropic/forge-sdk",
+  "version": "0.1.0",
+  "description": "NAPI bindings for Forge Engine SDK",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/user/forge-engine"
+  },
+  "keywords": [
+    "ai",
+    "coding",
+    "assistant",
+    "llm",
+    "napi",
+    "rust"
+  ],
+  "author": "Forge Contributors",
+  "license": "MIT",
+  "engines": {
+    "node": ">= 18"
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "*.node"
+  ],
+  "napi": {
+    "name": "forge-sdk",
+    "triples": {
+      "defaults": false,
+      "additional": [
+        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
+        "aarch64-unknown-linux-gnu",
+        "x86_64-unknown-linux-gnu",
+        "x86_64-pc-windows-msvc"
+      ]
+    }
+  },
+  "scripts": {
+    "artifacts": "napi artifacts",
+    "build": "napi build --platform --release",
+    "build:debug": "napi build --platform",
+    "prepublishOnly": "napi prepublish -t npm",
+    "test": "node test.js"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^2.18.0"
+  },
+  "optionalDependencies": {
+    "@anthropic/forge-sdk-darwin-arm64": "0.1.0",
+    "@anthropic/forge-sdk-darwin-x64": "0.1.0",
+    "@anthropic/forge-sdk-linux-x64-gnu": "0.1.0",
+    "@anthropic/forge-sdk-linux-arm64-gnu": "0.1.0",
+    "@anthropic/forge-sdk-win32-x64-msvc": "0.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

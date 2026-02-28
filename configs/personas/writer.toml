@@ -1,0 +1,11 @@
+[persona]
+name = "writer"
+display_name = "Writer"
+description = "Content creation and document writing"
+system_prompt_file = "prompts/personas/writer.md"
+
+[tools]
+include = ["read", "write", "edit", "web_search", "web_fetch"]
+
+[subagents]
+enabled = ["research", "writer"]

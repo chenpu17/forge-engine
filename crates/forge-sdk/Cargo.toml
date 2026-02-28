@@ -1,0 +1,44 @@
+[package]
+name = "forge-sdk"
+description = "SDK entry point for the Forge AI agent engine"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+forge-domain.workspace = true
+forge-config.workspace = true
+forge-infra.workspace = true
+forge-prompt.workspace = true
+forge-memory.workspace = true
+forge-llm.workspace = true
+forge-session.workspace = true
+forge-tools.workspace = true
+forge-mcp.workspace = true
+forge-agent.workspace = true
+
+forge-tools-coding.workspace = true
+
+toml.workspace = true
+toml_edit = "0.22"
+
+tokio.workspace = true
+tokio-stream.workspace = true
+futures.workspace = true
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+parking_lot.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

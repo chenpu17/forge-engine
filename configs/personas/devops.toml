@@ -1,0 +1,11 @@
+[persona]
+name = "devops"
+display_name = "DevOps"
+description = "Infrastructure and operations management"
+system_prompt_file = "prompts/personas/devops.md"
+
+[tools]
+include = ["all"]
+
+[subagents]
+enabled = ["explore", "plan", "research"]

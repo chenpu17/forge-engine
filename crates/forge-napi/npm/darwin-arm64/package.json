@@ -1,0 +1,16 @@
+{
+  "name": "@anthropic/forge-sdk-darwin-arm64",
+  "version": "0.1.0",
+  "os": ["darwin"],
+  "cpu": ["arm64"],
+  "main": "forge-sdk.darwin-arm64.node",
+  "files": ["forge-sdk.darwin-arm64.node"],
+  "description": "Forge Engine SDK native binding for macOS ARM64 (Apple Silicon)",
+  "license": "MIT",
+  "engines": {
+    "node": ">= 18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

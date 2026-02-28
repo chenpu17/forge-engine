@@ -1,0 +1,14 @@
+[persona]
+name = "assistant"
+display_name = "General Assistant"
+description = "General-purpose assistant for a wide range of tasks"
+system_prompt_file = "prompts/personas/assistant.md"
+
+[tools]
+include = ["all"]
+
+[subagents]
+enabled = ["explore", "plan", "research", "writer"]
+
+[options]
+is_default = true

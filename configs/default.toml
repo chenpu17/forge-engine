@@ -1,0 +1,53 @@
+# Forge Default Configuration
+
+[llm]
+# Provider: anthropic, openai, ollama
+# If not specified, will be inferred from model name:
+#   - claude* -> anthropic
+#   - gpt*, o1*, o3* -> openai
+#   - llama*, mistral*, codellama* -> ollama
+#   - unknown -> openai (compatible)
+# provider = "anthropic"
+
+model = "claude-sonnet-4-5-20250929"
+max_tokens = 8192
+temperature = 0.7
+
+# API key (prefer using environment variables)
+# Priority: config > FORGE_LLM_API_KEY > ANTHROPIC_API_KEY/OPENAI_API_KEY
+# api_key = ""
+
+# Custom base URL (for proxy or self-hosted endpoints)
+# Environment variable: FORGE_LLM_BASE_URL
+# base_url = "https://api.anthropic.com"
+
+[ui]
+content_highlighting = true
+theme = "default"
+line_numbers = true
+
+[tools]
+command_timeout = 120
+dangerous_commands = ["rm -rf", "sudo", "mkfs", "dd if="]
+mcp_enabled = true
+
+# Environment exposure policy for tools
+# [tools.env_policy]
+# mode = "all"          # all | allowlist | denylist
+# preset = "recommended"
+# allowlist = ["PATH", "HOME", "USER", "LANG", "TERM"]
+# denylist = ["SECRET_KEY"]
+
+# Proxy configuration for MCP and web tools
+# [tools.proxy]
+# mode = "system"  # none | system | environment | manual
+#
+# Manual mode settings (only used when mode = "manual"):
+# http_url = "http://proxy.company.com:8080"
+# https_url = "http://proxy.company.com:8080"
+# no_proxy = ["localhost", "127.0.0.1", "*.internal.com"]
+#
+# Proxy authentication:
+# [tools.proxy.auth]
+# username = "user"
+# password_env = "PROXY_PASSWORD"  # Read password from environment variable

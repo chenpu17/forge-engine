@@ -1,0 +1,15 @@
+[persona]
+name = "coder"
+display_name = "Coder"
+description = "Software development assistant"
+system_prompt_file = "prompts/personas/coder.md"
+
+[tools]
+include = ["all"]
+extensions = ["forge-tools-coding"]
+
+[subagents]
+enabled = ["explore", "plan", "research", "general", "writer", "analyst"]
+
+[templates]
+enabled = ["tool_usage", "git_protocol"]

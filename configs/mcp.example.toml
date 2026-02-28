@@ -1,0 +1,147 @@
+# Forge MCP Configuration
+#
+# This file configures MCP (Model Context Protocol) servers that extend
+# Forge's capabilities with additional tools.
+#
+# Copy this file to:
+#   - ~/.forge/mcp.toml (global)
+#   - .forge/mcp.toml (project-specific)
+#
+# MCP Specification: https://spec.modelcontextprotocol.io
+
+# Example: Filesystem server
+# Provides read/write access to files in specified directories
+# [[servers]]
+# name = "filesystem"
+# command = "npx"
+# args = ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/allowed/directory"]
+# enabled = true
+
+# Example: Git server
+# Provides Git repository operations
+# [[servers]]
+# name = "git"
+# command = "uvx"
+# args = ["mcp-server-git", "--repository", "."]
+# enabled = true
+
+# Example: Fetch server
+# Web page fetching and content extraction
+# [[servers]]
+# name = "fetch"
+# command = "uvx"
+# args = ["mcp-server-fetch"]
+# enabled = true
+
+# Example: Brave Search
+# Web search using Brave Search API (requires BRAVE_API_KEY env var)
+# [[servers]]
+# name = "brave-search"
+# command = "npx"
+# args = ["-y", "@anthropic/mcp-server-brave-search"]
+# enabled = false
+
+# Example: GitHub server
+# GitHub repository operations (requires GITHUB_TOKEN env var)
+# [[servers]]
+# name = "github"
+# command = "npx"
+# args = ["-y", "@modelcontextprotocol/server-github"]
+# enabled = false
+
+# Example: PostgreSQL server
+# [[servers]]
+# name = "postgres"
+# command = "npx"
+# args = ["-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost/mydb"]
+# enabled = false
+
+# Example: SQLite server
+# [[servers]]
+# name = "sqlite"
+# command = "uvx"
+# args = ["mcp-server-sqlite", "--db-path", "./data.db"]
+# enabled = false
+
+# =============================================================================
+# SSE Transport Examples (Remote MCP Servers)
+# =============================================================================
+
+# Example: Bocha AI MCP Server
+# Provides AI-powered web search capabilities via SSE
+# [[servers]]
+# name = "bocha"
+# transport = "sse"
+# url = "https://mcp.bochaai.com/sse"
+# api_key = "your-bocha-api-key"
+# enabled = true
+
+# Example: Custom Enterprise MCP Server
+# [[servers]]
+# name = "enterprise"
+# transport = "sse"
+# url = "https://mcp.internal.company.com/sse"
+# api_key = "your-api-key"
+# enabled = false
+
+# =============================================================================
+# Proxy Configuration
+# =============================================================================
+#
+# Global proxy for MCP SSE servers
+# [proxy]
+# mode = "manual"  # none | system | environment | manual
+# http_url = "http://proxy.company.com:8080"
+# https_url = "http://proxy.company.com:8080"
+# no_proxy = ["localhost", "127.0.0.1", "*.internal.com"]
+#
+# [proxy.auth]
+# username = "proxy_user"
+# password_env = "PROXY_PASSWORD"  # Read password from environment variable
+
+# =============================================================================
+# Keychain Integration (Desktop Recommended)
+# =============================================================================
+#
+# For Desktop users, API keys and proxy passwords should be stored in the
+# system keychain (Windows Credential Manager / macOS Keychain / Linux Secret Service)
+# instead of plain text in config files.
+#
+# Use the SDK methods to store secrets:
+#   - sdk.setMcpApiKey("server_name", "api_key")
+#   - sdk.setGlobalProxyPassword("password")
+#
+# Then reference them in config with `*_from_keychain = true`:
+
+# Example: SSE server with API key from keychain
+# [[servers]]
+# name = "secure-service"
+# transport = "sse"
+# url = "https://mcp.example.com/sse"
+# api_key_from_keychain = true  # API key stored in keychain
+# api_key_auth = "bearer"        # bearer | header
+# enabled = true
+
+# =============================================================================
+# Per-Server Proxy Selection
+# =============================================================================
+#
+# Each server can opt-in to using the global proxy by setting `proxy_name = "global"`.
+# When `proxy_name` is not set, the server connects directly (no proxy).
+
+# Example: Server using global proxy
+# [[servers]]
+# name = "external-api"
+# transport = "sse"
+# url = "https://external-mcp.example.com/sse"
+# api_key_from_keychain = true
+# enabled = true
+# proxy_name = "global"
+
+# Example: Server that bypasses proxy (direct connection)
+# [[servers]]
+# name = "internal-api"
+# transport = "sse"
+# url = "https://internal.company.com/sse"
+# enabled = true
+# # proxy_name = "global"  # Uncomment to use global proxy

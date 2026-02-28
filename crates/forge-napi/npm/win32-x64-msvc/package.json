@@ -1,0 +1,16 @@
+{
+  "name": "@anthropic/forge-sdk-win32-x64-msvc",
+  "version": "0.1.0",
+  "os": ["win32"],
+  "cpu": ["x64"],
+  "main": "forge-sdk.win32-x64-msvc.node",
+  "files": ["forge-sdk.win32-x64-msvc.node"],
+  "description": "Forge Engine SDK native binding for Windows x64 (MSVC)",
+  "license": "MIT",
+  "engines": {
+    "node": ">= 18"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
