@@ -150,6 +150,113 @@ impl Default for SkillRegistryBuilder {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_slash_command_basic() {
+        let (name, args) = parse_slash_command("/commit -m 'fix bug'").unwrap();
+        assert_eq!(name, "commit");
+        assert_eq!(args, "-m 'fix bug'");
+    }
+
+    #[test]
+    fn test_parse_slash_command_no_args() {
+        let (name, args) = parse_slash_command("/help").unwrap();
+        assert_eq!(name, "help");
+        assert_eq!(args, "");
+    }
+
+    #[test]
+    fn test_parse_slash_command_not_a_command() {
+        assert!(parse_slash_command("hello world").is_none());
+    }
+
+    #[test]
+    fn test_parse_slash_command_empty_slash() {
+        assert!(parse_slash_command("/").is_none());
+    }
+
+    #[test]
+    fn test_parse_slash_command_whitespace_trimmed() {
+        let (name, args) = parse_slash_command("  /review  some code  ").unwrap();
+        assert_eq!(name, "review");
+        assert_eq!(args, "some code");
+    }
+
+    #[test]
+    fn test_skill_registry_builder() {
+        let registry = SkillRegistryBuilder::new()
+            .builtin_path(PathBuf::from("/builtin"))
+            .user_path(PathBuf::from("/user"))
+            .project_path(PathBuf::from("/project"))
+            .build()
+            .unwrap();
+
+        let paths = registry.get_skill_paths();
+        assert_eq!(paths.len(), 3);
+        assert_eq!(paths[0].1, SkillSource::Builtin);
+        assert_eq!(paths[1].1, SkillSource::User);
+        assert_eq!(paths[2].1, SkillSource::Project);
+    }
+
+    #[test]
+    fn test_skill_registry_stub_methods() {
+        let registry = SkillRegistryBuilder::new().build().unwrap();
+        assert!(registry.expand_user_invocable("test", "").is_none());
+        assert!(registry.list_model_invocable().is_empty());
+        assert!(registry.list_all().is_empty());
+        assert_eq!(registry.reload().unwrap(), 0);
+    }
+
+    #[test]
+    fn test_skill_registry_get_full_not_found() {
+        let registry = SkillRegistryBuilder::new().build().unwrap();
+        let err = registry.get_full("nonexistent").unwrap_err();
+        assert!(err.to_string().contains("nonexistent"));
+    }
+
+    #[test]
+    fn test_parse_slash_command_double_slash() {
+        // "//double" — the name should be "/double" (everything after the first slash)
+        let result = parse_slash_command("//double");
+        assert!(result.is_some());
+        let (name, args) = result.unwrap();
+        assert_eq!(name, "/double");
+        assert_eq!(args, "");
+    }
+
+    #[test]
+    fn test_parse_slash_command_space_after_slash() {
+        // "/ " — slash followed by whitespace only, name would be empty
+        assert!(parse_slash_command("/ ").is_none());
+    }
+
+    #[test]
+    fn test_parse_slash_command_unicode_name() {
+        let result = parse_slash_command("/提交 some args");
+        assert!(result.is_some());
+        let (name, args) = result.unwrap();
+        assert_eq!(name, "提交");
+        assert_eq!(args, "some args");
+    }
+
+    #[test]
+    fn test_parse_slash_command_empty_string() {
+        assert!(parse_slash_command("").is_none());
+    }
+
+    #[test]
+    fn test_skill_search_paths_no_trust() {
+        let paths = skill_search_paths(Path::new("/tmp/fake"), false);
+        // Project skills should NOT be included when trust is false
+        for (_, source) in &paths {
+            assert_ne!(*source, SkillSource::Project);
+        }
+    }
+}
+
 /// Parse a slash command from user input.
 ///
 /// Returns `(name, args)` if the input starts with `/`.

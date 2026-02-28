@@ -1,7 +1,8 @@
 //! Verifier pipeline for generation-validation separation.
 
-use crate::{VerifierConfig, VerifierMode, VerifierPolicy};
-use forge_domain::{ToolCall, ToolResult};
+use crate::{AgentError, Result, VerifierConfig, VerifierMode, VerifierPolicy};
+use forge_domain::{AgentEvent, ToolCall, ToolResult};
+use tokio::sync::mpsc;
 
 /// Outcome of a verifier evaluation on a tool call result.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -92,6 +93,50 @@ impl VerifierPipeline {
             },
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Verifier stats & apply helper (extracted from core_loop.rs)
+// ---------------------------------------------------------------------------
+
+/// Tracks verifier evaluation statistics across the agent loop.
+#[derive(Default)]
+pub(crate) struct VerifierStats {
+    pub evaluated: usize,
+    pub warnings: usize,
+    pub blocked: usize,
+}
+
+/// Evaluate a single tool call result through the verifier pipeline and emit events.
+pub(crate) async fn apply_verifier_decision(
+    verifier: &VerifierPipeline,
+    call: &ToolCall,
+    result: &ToolResult,
+    is_readonly: bool,
+    tx: &mpsc::Sender<Result<AgentEvent>>,
+    stats: &mut VerifierStats,
+) -> Result<()> {
+    stats.evaluated += 1;
+    let decision = verifier.evaluate(call, result, is_readonly);
+    match decision {
+        VerifierDecision::Pass => return Ok(()),
+        VerifierDecision::Warn { message } => {
+            stats.warnings += 1;
+            let _ = tx
+                .send(Ok(AgentEvent::Recovery {
+                    action: "Verifier warning".to_string(),
+                    suggestion: Some(message),
+                }))
+                .await;
+        }
+        VerifierDecision::Fail { reason } => {
+            stats.blocked += 1;
+            let _ = tx.send(Ok(AgentEvent::Error { message: reason.clone() })).await;
+            return Err(AgentError::PlanningError(reason));
+        }
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

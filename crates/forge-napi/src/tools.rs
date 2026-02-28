@@ -2,15 +2,21 @@
 
 use napi_derive::napi;
 
-/// Tool information for settings UI
+/// Tool information for settings UI.
 #[napi(object)]
 #[derive(Clone, Debug)]
 pub struct JsToolInfo {
+    /// Tool name (unique identifier).
     pub name: String,
+    /// Tool description.
     pub description: String,
+    /// Whether this is a built-in tool.
     pub builtin: bool,
+    /// Whether this tool is currently disabled.
     pub disabled: bool,
+    /// Tool category (e.g. "file_system", "shell").
     pub category: String,
+    /// Whether this tool requires network access.
     pub requires_network: bool,
 }
 
@@ -37,11 +43,13 @@ impl From<forge_sdk::ToolInfo> for JsToolInfo {
     }
 }
 
-/// Tool execution result from JavaScript
+/// Tool execution result from JavaScript.
 #[napi(object)]
 #[derive(Clone, Default)]
 pub struct JsToolResult {
+    /// Output text from tool execution.
     pub output: String,
+    /// Whether the result is an error.
     pub is_error: Option<bool>,
 }
 
@@ -55,11 +63,13 @@ impl From<JsToolResult> for forge_tools::ToolOutput {
     }
 }
 
-/// Tool execution context passed to JavaScript
+/// Tool execution context passed to JavaScript.
 #[napi(object)]
 #[derive(Clone)]
 pub struct JsToolContext {
+    /// Working directory path.
     pub working_dir: String,
+    /// Timeout in seconds.
     pub timeout_secs: u32,
 }
 
@@ -67,22 +77,27 @@ impl From<&forge_tools::ToolContext> for JsToolContext {
     fn from(ctx: &forge_tools::ToolContext) -> Self {
         Self {
             working_dir: ctx.working_dir.to_string_lossy().to_string(),
-            timeout_secs: ctx.timeout_secs as u32,
+            timeout_secs: u32::try_from(ctx.timeout_secs).unwrap_or(u32::MAX),
         }
     }
 }
 
-/// Arguments for the execute callback
+/// Arguments for the execute callback.
 #[derive(Clone)]
 pub struct JsToolExecuteArgs {
+    /// Tool parameters (JSON string).
     pub params: String,
+    /// Execution context.
     pub ctx: JsToolContext,
 }
 
-/// Custom tool definition from JavaScript
+/// Custom tool definition from JavaScript.
 #[napi(object)]
 pub struct JsToolDefinition {
+    /// Tool name.
     pub name: String,
+    /// Tool description.
     pub description: String,
+    /// JSON Schema for tool parameters.
     pub parameters_schema: String,
 }

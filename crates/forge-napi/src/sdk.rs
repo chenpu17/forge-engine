@@ -5,15 +5,18 @@ use napi_derive::napi;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-/// Forge SDK - Main entry point for Node.js applications
+/// Forge SDK - Main entry point for Node.js applications.
+#[allow(missing_docs)]
 #[napi]
 pub struct ForgeSDK {
     inner: Arc<RwLock<Option<forge_sdk::ForgeSDK>>>,
     config: forge_sdk::ForgeConfig,
 }
 
+#[allow(missing_docs)]
 #[napi]
 impl ForgeSDK {
+    /// Create a new SDK instance from configuration.
     #[napi(constructor)]
     pub fn new(config: &ForgeConfig) -> napi::Result<Self> {
         Ok(Self {
@@ -22,6 +25,7 @@ impl ForgeSDK {
         })
     }
 
+    /// Get a clone of the inner SDK handle.
     pub(crate) fn inner_handle(&self) -> Arc<RwLock<Option<forge_sdk::ForgeSDK>>> {
         self.inner.clone()
     }

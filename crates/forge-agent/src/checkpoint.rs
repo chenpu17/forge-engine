@@ -3,10 +3,12 @@
 //! Creates a snapshot of the working tree before the first write operation
 //! and can restore it when the Reflector determines the agent is stuck.
 
-use crate::{AgentError, Result};
+use crate::{AgentConfig, AgentError, Result};
 use chrono::{DateTime, Utc};
+use forge_domain::ToolCall;
 use forge_llm::ChatMessage;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use tokio::process::Command;
@@ -352,6 +354,83 @@ impl GitCheckpointManager {
         Ok(RollbackReport { files_count, stash_applied })
     }
 }
+
+// ---------------------------------------------------------------------------
+// Runtime resume state & helpers (extracted from core_loop.rs)
+// ---------------------------------------------------------------------------
+
+/// Mutable state tracked across iterations for durable resume.
+#[derive(Default)]
+pub(crate) struct RuntimeResumeState {
+    pub applied_tool_call_ids: HashSet<String>,
+    pub side_effect_markers: HashSet<String>,
+    pub pending_approvals: Vec<String>,
+}
+
+/// Build a list of [`RuntimeToolCallState`] entries from tool calls.
+pub(crate) fn format_runtime_tool_states(
+    calls: &[ToolCall],
+    status: &str,
+) -> Vec<RuntimeToolCallState> {
+    calls
+        .iter()
+        .map(|call| RuntimeToolCallState {
+            id: call.id.clone(),
+            name: call.name.clone(),
+            status: status.to_string(),
+        })
+        .collect()
+}
+
+/// Persist a runtime checkpoint to disk (no-op when store/session are absent).
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn persist_runtime_checkpoint(
+    store: Option<&RuntimeCheckpointStore>,
+    session_id: Option<&str>,
+    round: usize,
+    stage: &str,
+    messages: &[ChatMessage],
+    runtime_state: &RuntimeResumeState,
+    tool_call_states: &[RuntimeToolCallState],
+    rollback_hint: Option<&str>,
+) -> Result<()> {
+    let (Some(store), Some(session_id)) = (store, session_id) else {
+        return Ok(());
+    };
+
+    let checkpoint = RuntimeCheckpointV2 {
+        version: 2,
+        session_id: session_id.to_string(),
+        round,
+        stage: stage.to_string(),
+        messages: messages.to_vec(),
+        tool_call_states: tool_call_states.to_vec(),
+        pending_approvals: runtime_state.pending_approvals.clone(),
+        rollback_hint: rollback_hint.map(str::to_string),
+        applied_tool_call_ids: runtime_state.applied_tool_call_ids.iter().cloned().collect(),
+        side_effect_markers: runtime_state.side_effect_markers.iter().cloned().collect(),
+        updated_at: Utc::now(),
+    };
+    store.save(&checkpoint).await
+}
+
+/// Build a deduplication marker for a tool call's side effects.
+pub(crate) fn build_side_effect_marker(call: &ToolCall) -> String {
+    format!(
+        "{}:{}",
+        call.name,
+        crate::tool_dispatch::normalize_json(&call.input)
+    )
+}
+
+/// Build a fingerprint for the current agent context (working dir + model).
+pub(crate) fn build_context_fingerprint(config: &AgentConfig) -> String {
+    format!("{}|{}", config.working_dir.display(), config.model)
+}
+
+// ---------------------------------------------------------------------------
+// Git helpers
+// ---------------------------------------------------------------------------
 
 /// Run a git command in the given directory and return trimmed stdout.
 async fn run_git(dir: &Path, args: &[&str]) -> Result<String> {

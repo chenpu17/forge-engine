@@ -1,7 +1,7 @@
 //! Grep tool - Search file contents
 
 use crate::description::ToolDescriptions;
-use crate::security::validate_path;
+use crate::security::validate_path_with_confirmed;
 use crate::{ToolError, ToolExecutionContext, ToolOutput};
 use async_trait::async_trait;
 use forge_domain::Tool;
@@ -84,7 +84,7 @@ impl Tool for GrepTool {
         // Validate and resolve search path with security checks
         let search_path = if let Some(p) = crate::optional_str(&params, "path") {
             // Validate the path for security (path traversal, sensitive files, working dir)
-            validate_path(p, ctx.working_dir())?
+            validate_path_with_confirmed(p, ctx.working_dir(), ctx.confirmed_paths())?
         } else {
             ctx.working_dir().to_path_buf()
         };

@@ -33,6 +33,15 @@ pub trait ToolExecutionContext: Send + Sync + 'static {
     /// Timeout in seconds for tool execution.
     fn timeout_secs(&self) -> u64;
 
+    /// Paths confirmed by the user (allowed even if outside working directory).
+    ///
+    /// Default returns an empty set. Concrete contexts override this.
+    fn confirmed_paths(&self) -> &std::collections::HashSet<std::path::PathBuf> {
+        static EMPTY: std::sync::OnceLock<std::collections::HashSet<std::path::PathBuf>> =
+            std::sync::OnceLock::new();
+        EMPTY.get_or_init(std::collections::HashSet::new)
+    }
+
     /// Downcast to `&dyn Any` for concrete type access.
     ///
     /// Tools that need access to concrete context fields (e.g. extension managers)

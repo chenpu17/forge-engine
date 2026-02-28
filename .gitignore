@@ -1,5 +1,29 @@
-.DS_Store
+# Build
 target/
+
+# IDE
+.idea/
+.vscode/
 *.swp
 *.swo
 *~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.*
+
+# Node (forge-napi build artifacts)
+node_modules/
+*.node
+
+# Python (forge-python build artifacts)
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+*.so

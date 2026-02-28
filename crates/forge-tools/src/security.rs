@@ -335,34 +335,17 @@ impl PathSecurity {
         None
     }
 
-    /// Normalize a path without requiring it to exist
+    /// Normalize a path without requiring it to exist.
+    ///
+    /// Delegates to `path_utils::normalize_path` and returns `None` for empty results.
     #[allow(clippy::unused_self)]
     fn normalize_path(&self, path: &Path) -> Option<PathBuf> {
-        let mut components = Vec::new();
-
-        for component in path.components() {
-            match component {
-                std::path::Component::ParentDir => {
-                    // Pop the last component, but don't allow escaping root
-                    if components.is_empty() {
-                        return None; // Trying to go above root
-                    }
-                    components.pop();
-                }
-                std::path::Component::CurDir => {
-                    // Skip current directory markers
-                }
-                c => {
-                    components.push(c);
-                }
-            }
+        let normalized = crate::path_utils::normalize_path(path);
+        if normalized.as_os_str().is_empty() {
+            None
+        } else {
+            Some(normalized)
         }
-
-        if components.is_empty() {
-            return None;
-        }
-
-        Some(components.iter().collect())
     }
 }
 
@@ -464,20 +447,17 @@ pub fn validate_path_from_context(
     validate_path_with_confirmed(path, &ctx.working_dir, &ctx.confirmed_paths)
 }
 
-/// Validate a path for writing (file may not exist yet)
+/// Core write-path validation logic shared by all `validate_write_path*` variants.
 ///
-/// This validates the parent directory exists and is within allowed paths,
-/// then returns the full path for the new file.
-///
-/// # Security
-/// This function canonicalizes the parent directory to resolve symlinks,
-/// preventing symlink-based directory traversal attacks where a symlink
-/// inside the working directory points to an external location.
-///
-/// # Errors
-///
-/// Returns an error if the path is sensitive, outside the working directory, or invalid.
-pub fn validate_write_path(path: &str, working_dir: &Path) -> Result<PathBuf, ToolError> {
+/// When `confirmed_paths` is `Some`, paths outside the working directory that match
+/// a confirmed entry return `Ok`; unconfirmed paths return `PathConfirmationRequired`.
+/// When `confirmed_paths` is `None`, paths outside the working directory return
+/// `PermissionDenied` (hard block).
+fn validate_write_path_inner(
+    path: &str,
+    working_dir: &Path,
+    confirmed_paths: Option<&std::collections::HashSet<PathBuf>>,
+) -> Result<PathBuf, ToolError> {
     let security = default_path_security();
     let path_obj = Path::new(path);
 
@@ -502,26 +482,21 @@ pub fn validate_write_path(path: &str, working_dir: &Path) -> Result<PathBuf, To
     let resolved_path =
         if Path::new(path).is_absolute() { PathBuf::from(path) } else { working_dir.join(path) };
 
-    // Get the filename component
     let filename = resolved_path.file_name().ok_or_else(|| {
         ToolError::PermissionDenied(format!("Invalid path (no filename): {path}"))
     })?;
 
-    // Get the parent directory - this is crucial for symlink protection
+    // Get the parent directory — crucial for symlink protection
     let parent_dir = resolved_path.parent().ok_or_else(|| {
         ToolError::PermissionDenied(format!("Invalid path (no parent): {path}"))
     })?;
 
-    // Canonicalize the parent directory to resolve symlinks
-    // This prevents symlink-based escapes: if working_dir/symlink -> /external,
-    // then working_dir/symlink/file.txt would resolve to /external/file.txt
-    // For write operations, the parent may not exist yet, so we handle that case.
+    // Canonicalize the parent directory to resolve symlinks.
+    // For write operations the parent may not exist yet, so we walk up to the
+    // nearest existing ancestor.
     let canonical_parent = canonicalize_parent_for_write(parent_dir, path)?;
-
-    // Build the final canonical path
     let canonical_path = canonical_parent.join(filename);
 
-    // Check if within working directory or allowed paths
     if security.config.enforce_working_dir {
         let canonical_working_dir =
             working_dir.canonicalize().unwrap_or_else(|_| working_dir.to_path_buf());
@@ -535,15 +510,75 @@ pub fn validate_write_path(path: &str, working_dir: &Path) -> Result<PathBuf, To
             });
 
         if !is_allowed {
-            return Err(ToolError::PermissionDenied(format!(
-                "Writing outside working directory '{}' is blocked (resolved path: '{}')",
-                canonical_working_dir.display(),
-                canonical_path.display()
-            )));
+            let is_confirmed = confirmed_paths.map_or(false, |confirmed| {
+                confirmed.iter().any(|p| {
+                    p.canonicalize().map_or_else(
+                        |_| canonical_path.starts_with(p) || &canonical_path == p,
+                        |canonical_confirmed| {
+                            canonical_path.starts_with(&canonical_confirmed)
+                                || canonical_path == canonical_confirmed
+                        },
+                    )
+                })
+            });
+
+            if !is_confirmed {
+                return if confirmed_paths.is_some() {
+                    Err(ToolError::PathConfirmationRequired {
+                        path: canonical_path.to_string_lossy().to_string(),
+                        reason: format!(
+                            "Writing to path '{}' outside working directory '{}' requires confirmation",
+                            canonical_path.display(),
+                            canonical_working_dir.display()
+                        ),
+                    })
+                } else {
+                    Err(ToolError::PermissionDenied(format!(
+                        "Writing outside working directory '{}' is blocked (resolved path: '{}')",
+                        canonical_working_dir.display(),
+                        canonical_path.display()
+                    )))
+                };
+            }
         }
     }
 
     Ok(canonical_path)
+}
+
+/// Validate a path for writing (file may not exist yet)
+///
+/// This validates the parent directory exists and is within allowed paths,
+/// then returns the full path for the new file.
+///
+/// # Security
+/// This function canonicalizes the parent directory to resolve symlinks,
+/// preventing symlink-based directory traversal attacks where a symlink
+/// inside the working directory points to an external location.
+///
+/// # Errors
+///
+/// Returns an error if the path is sensitive, outside the working directory, or invalid.
+pub fn validate_write_path(path: &str, working_dir: &Path) -> Result<PathBuf, ToolError> {
+    validate_write_path_inner(path, working_dir, None)
+}
+
+/// Validate a path for writing with confirmed paths support
+///
+/// Like `validate_write_path` but also checks `confirmed_paths` before blocking
+/// writes outside the working directory.
+///
+/// # Errors
+///
+/// Returns an error if the path is sensitive, outside the working directory
+/// (and not in confirmed_paths), or invalid.
+#[allow(clippy::implicit_hasher)]
+pub fn validate_write_path_with_confirmed(
+    path: &str,
+    working_dir: &Path,
+    confirmed_paths: &std::collections::HashSet<PathBuf>,
+) -> Result<PathBuf, ToolError> {
+    validate_write_path_inner(path, working_dir, Some(confirmed_paths))
 }
 
 /// Validate a path for writing using `ToolContext` (convenience function)
@@ -562,90 +597,7 @@ pub fn validate_write_path_from_context(
     path: &str,
     ctx: &crate::ToolContext,
 ) -> Result<PathBuf, ToolError> {
-    let security = default_path_security();
-    let path_obj = Path::new(path);
-
-    // Check for system-level sensitive paths (hard block)
-    if PlatformPaths::is_sensitive_path(path_obj) {
-        return Err(ToolError::PermissionDenied(format!(
-            "Writing to '{path}' is blocked for security"
-        )));
-    }
-
-    // Check for project-level sensitive file patterns (requires confirmation)
-    if let Some(filename) = path_obj.file_name().and_then(|f| f.to_str()) {
-        if PlatformPaths::needs_confirmation(filename) {
-            return Err(ToolError::PathConfirmationRequired {
-                path: path.to_string(),
-                reason: format!("Writing to file '{filename}' may overwrite sensitive data"),
-            });
-        }
-    }
-
-    // Resolve the intended path
-    let resolved_path = if Path::new(path).is_absolute() {
-        PathBuf::from(path)
-    } else {
-        ctx.working_dir.join(path)
-    };
-
-    // Get the filename component
-    let filename = resolved_path.file_name().ok_or_else(|| {
-        ToolError::PermissionDenied(format!("Invalid path (no filename): {path}"))
-    })?;
-
-    // Get the parent directory - this is crucial for symlink protection
-    let parent_dir = resolved_path.parent().ok_or_else(|| {
-        ToolError::PermissionDenied(format!("Invalid path (no parent): {path}"))
-    })?;
-
-    // Canonicalize the parent directory to resolve symlinks
-    // This prevents symlink-based escapes: if working_dir/symlink -> /external,
-    // then working_dir/symlink/file.txt would resolve to /external/file.txt
-    // For write operations, the parent may not exist yet, so we handle that case.
-    let canonical_parent = canonicalize_parent_for_write(parent_dir, path)?;
-
-    // Build the final canonical path
-    let canonical_path = canonical_parent.join(filename);
-
-    // Check if within working directory, allowed paths, or confirmed paths
-    if security.config.enforce_working_dir {
-        let canonical_working_dir =
-            ctx.working_dir.canonicalize().unwrap_or_else(|_| ctx.working_dir.clone());
-
-        let is_allowed = canonical_path.starts_with(&canonical_working_dir)
-            || security.config.allowed_paths.iter().any(|allowed| {
-                allowed.canonicalize().map_or_else(
-                    |_| canonical_path.starts_with(allowed),
-                    |canonical_allowed| canonical_path.starts_with(&canonical_allowed),
-                )
-            });
-
-        // Check confirmed paths (also canonicalize for proper comparison)
-        let is_confirmed = ctx.confirmed_paths.iter().any(|p| {
-            p.canonicalize().map_or_else(
-                |_| canonical_path.starts_with(p) || &canonical_path == p,
-                |canonical_confirmed| {
-                    canonical_path.starts_with(&canonical_confirmed)
-                        || canonical_path == canonical_confirmed
-                },
-            )
-        });
-
-        if !is_allowed && !is_confirmed {
-            // Return PathConfirmationRequired instead of PermissionDenied
-            return Err(ToolError::PathConfirmationRequired {
-                path: canonical_path.to_string_lossy().to_string(),
-                reason: format!(
-                    "Writing to path '{}' outside working directory '{}' requires confirmation",
-                    canonical_path.display(),
-                    canonical_working_dir.display()
-                ),
-            });
-        }
-    }
-
-    Ok(canonical_path)
+    validate_write_path_inner(path, &ctx.working_dir, Some(&ctx.confirmed_paths))
 }
 
 #[cfg(test)]

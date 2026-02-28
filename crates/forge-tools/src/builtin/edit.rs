@@ -2,7 +2,7 @@
 
 use crate::description::ToolDescriptions;
 use crate::platform::PlatformPaths;
-use crate::security::validate_write_path;
+use crate::security::validate_write_path_with_confirmed;
 use crate::{ConfirmationLevel, ToolError, ToolExecutionContext, ToolOutput};
 use async_trait::async_trait;
 use forge_domain::Tool;
@@ -104,7 +104,7 @@ impl Tool for EditTool {
         }
 
         // Validate path for security (path traversal, sensitive files, symlink protection)
-        let path = validate_write_path(file_path, ctx.working_dir())?;
+        let path = validate_write_path_with_confirmed(file_path, ctx.working_dir(), ctx.confirmed_paths())?;
 
         // Read file
         let content = tokio::fs::read_to_string(&path)

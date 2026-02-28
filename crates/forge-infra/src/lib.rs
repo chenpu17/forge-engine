@@ -8,7 +8,11 @@
 //!
 //! Configuration types live in `forge-config`; domain types in `forge-domain`.
 
+pub mod http;
+pub mod i18n;
 pub mod logging;
+pub mod sandbox;
+pub mod secret;
 pub mod storage;
 pub mod token;
 

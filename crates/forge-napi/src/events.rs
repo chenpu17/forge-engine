@@ -3,55 +3,94 @@
 use napi_derive::napi;
 use serde::{Deserialize, Serialize};
 
-/// Todo item
+/// Todo item exposed to JavaScript.
 #[napi(object)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JsTodoItem {
+    /// Task description.
     pub task: String,
+    /// Task status (e.g. "pending", "done").
     pub status: String,
 }
 
-/// Agent event data (serializable to JSON for JS)
+/// Agent event data (serializable to JSON for JS).
 #[napi(object)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JsAgentEvent {
+    /// Event type discriminator (e.g. "TextDelta", "ToolResult", "Done").
     #[serde(rename = "type")]
     pub event_type: String,
+    /// Session identifier.
     pub session_id: Option<String>,
+    /// Request identifier.
     pub request_id: Option<String>,
+    /// Text content (thinking, path info, checkpoint SHA).
     pub content: Option<String>,
+    /// Incremental text delta.
     pub delta: Option<String>,
+    /// Tool call or confirmation identifier.
     pub id: Option<String>,
+    /// Tool name.
     pub name: Option<String>,
+    /// Tool input (JSON string).
     pub input: Option<String>,
+    /// Tool output text.
     pub output: Option<String>,
+    /// Whether a tool result is an error.
     pub is_error: Option<bool>,
+    /// Input tokens consumed.
     pub input_tokens: Option<u32>,
+    /// Output tokens generated.
     pub output_tokens: Option<u32>,
+    /// Cache read tokens.
     pub cache_read_tokens: Option<u32>,
+    /// Cache creation tokens.
     pub cache_creation_tokens: Option<u32>,
+    /// Recovery action taken.
     pub action: Option<String>,
+    /// Recovery suggestion.
     pub suggestion: Option<String>,
+    /// Tool name for confirmation events.
     pub tool: Option<String>,
+    /// Tool parameters (JSON string) for confirmation.
     pub params: Option<String>,
+    /// Confirmation level.
     pub level: Option<String>,
+    /// Todo task description.
     pub task: Option<String>,
+    /// List of todo items.
     pub todos: Option<Vec<JsTodoItem>>,
+    /// Done summary.
     pub summary: Option<String>,
+    /// Error or recovery message.
     pub message: Option<String>,
+    /// Current token count for context warning.
     pub current_tokens: Option<u32>,
+    /// Token limit for context warning.
     pub limit: Option<u32>,
+    /// Message count before compression.
     pub messages_before: Option<u32>,
+    /// Message count after compression.
     pub messages_after: Option<u32>,
+    /// Tokens saved by compression.
     pub tokens_saved: Option<u32>,
+    /// Background task type.
     pub task_type: Option<String>,
+    /// Background task description.
     pub description: Option<String>,
+    /// Process exit code.
     pub exit_code: Option<i32>,
+    /// Whether the operation succeeded.
     pub success: Option<bool>,
+    /// Plan mode file path.
     pub plan_file: Option<String>,
+    /// Whether plan was saved on exit.
     pub saved: Option<bool>,
+    /// Retry attempt number.
     pub attempt: Option<u32>,
+    /// Maximum retry attempts.
     pub max_attempts: Option<u32>,
+    /// OpenTelemetry trace identifier.
     pub trace_id: Option<String>,
 }
 
@@ -73,6 +112,7 @@ impl JsAgentEvent {
         }
     }
 
+    /// Check if this is a terminal event (Done, Cancelled, or Error).
     pub fn is_terminal(&self) -> bool {
         matches!(self.event_type.as_str(), "Done" | "Cancelled" | "Error")
     }
@@ -118,10 +158,10 @@ impl From<forge_sdk::AgentEvent> for JsAgentEvent {
                 cache_read_tokens, cache_creation_tokens,
             } => {
                 let mut e = Self::new("TokenUsage");
-                e.input_tokens = Some(input_tokens as u32);
-                e.output_tokens = Some(output_tokens as u32);
-                e.cache_read_tokens = cache_read_tokens.map(|t| t as u32);
-                e.cache_creation_tokens = cache_creation_tokens.map(|t| t as u32);
+                e.input_tokens = Some(u32::try_from(input_tokens).unwrap_or(u32::MAX));
+                e.output_tokens = Some(u32::try_from(output_tokens).unwrap_or(u32::MAX));
+                e.cache_read_tokens = cache_read_tokens.map(|t| u32::try_from(t).unwrap_or(u32::MAX));
+                e.cache_creation_tokens = cache_creation_tokens.map(|t| u32::try_from(t).unwrap_or(u32::MAX));
                 e
             }
             forge_sdk::AgentEvent::Recovery { action, suggestion } => {
@@ -164,17 +204,17 @@ impl From<forge_sdk::AgentEvent> for JsAgentEvent {
             }
             forge_sdk::AgentEvent::ContextWarning { current_tokens, limit } => {
                 let mut e = Self::new("ContextWarning");
-                e.current_tokens = Some(current_tokens as u32);
-                e.limit = Some(limit as u32);
+                e.current_tokens = Some(u32::try_from(current_tokens).unwrap_or(u32::MAX));
+                e.limit = Some(u32::try_from(limit).unwrap_or(u32::MAX));
                 e
             }
             forge_sdk::AgentEvent::ContextCompressed {
                 messages_before, messages_after, tokens_saved,
             } => {
                 let mut e = Self::new("ContextCompressed");
-                e.messages_before = Some(messages_before as u32);
-                e.messages_after = Some(messages_after as u32);
-                e.tokens_saved = Some(tokens_saved as u32);
+                e.messages_before = Some(u32::try_from(messages_before).unwrap_or(u32::MAX));
+                e.messages_after = Some(u32::try_from(messages_after).unwrap_or(u32::MAX));
+                e.tokens_saved = Some(u32::try_from(tokens_saved).unwrap_or(u32::MAX));
                 e
             }
             forge_sdk::AgentEvent::ContextRecoveryAttempt { message } => {
@@ -233,7 +273,7 @@ impl From<forge_sdk::AgentEvent> for JsAgentEvent {
             forge_sdk::AgentEvent::RolledBack { reason, files_restored } => {
                 let mut e = Self::new("RolledBack");
                 e.message = Some(reason);
-                e.messages_after = Some(files_restored as u32);
+                e.messages_after = Some(u32::try_from(files_restored).unwrap_or(u32::MAX));
                 e
             }
         }

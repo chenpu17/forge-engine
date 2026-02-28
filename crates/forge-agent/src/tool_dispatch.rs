@@ -3,9 +3,24 @@
 //! Handles tool call partitioning (parallel vs serial), permission checking,
 //! path confirmation flow, and repetition detection.
 
+use crate::checkpoint::{
+    build_side_effect_marker, format_runtime_tool_states, persist_runtime_checkpoint,
+    GitCheckpointManager, RuntimeCheckpointStore, RuntimeResumeState,
+};
+use crate::episodic_memory::EpisodicMemoryStore;
 use crate::executor::ToolExecutor;
+use crate::prepare::{
+    is_test_command_success, parse_plan_mode_marker, run_optional_stage, AgentLoopStage,
+    PlanModeMarker,
+};
+use crate::reflector::{
+    build_episode_signature, handle_error_recovery, maybe_append_episode_success, RecoveryAction,
+    Reflector,
+};
+use crate::verifier::{apply_verifier_decision, VerifierPipeline, VerifierStats};
 use crate::{AgentConfig, AgentError, ConfirmationHandler, ConfirmationLevel, LoopProtectionConfig, Result};
 use forge_domain::{AgentEvent, ToolCall, ToolResult};
+use forge_llm::ChatMessage;
 use forge_tools::trust_permission::{PermissionCheckResult, TrustAwarePermissionManager};
 use parking_lot::Mutex;
 use std::collections::HashMap;
@@ -18,6 +33,23 @@ use tokio_util::sync::CancellationToken;
 pub const REJECTION_TTL: std::time::Duration = std::time::Duration::from_secs(300);
 /// Maximum number of rejected tool entries to track.
 pub const MAX_REJECTED_ENTRIES: usize = 200;
+
+/// Output from the tool dispatch stage.
+pub(crate) struct ToolDispatchOutput {
+    pub tool_results: Vec<ToolResult>,
+    pub rollback_hint: Option<String>,
+}
+
+/// Mutable state passed into the dispatch function.
+pub(crate) struct DispatchState<'a> {
+    pub runtime_state: &'a mut RuntimeResumeState,
+    pub reflector: &'a mut Reflector,
+    pub checkpoint_manager: &'a mut GitCheckpointManager,
+    pub verifier_stats: &'a mut VerifierStats,
+    pub rejected_tools: &'a mut HashMap<String, (String, Instant)>,
+    pub pending_episode: &'a mut Option<(String, String)>,
+    pub task_completed_at_iteration: &'a mut Option<usize>,
+}
 
 /// Check cancellation and emit event if cancelled.
 pub async fn abort_if_cancelled(
@@ -542,4 +574,404 @@ pub fn normalize_json(value: &serde_json::Value) -> String {
         }
         other => other.to_string(),
     }
+}
+
+// ---------------------------------------------------------------------------
+// dispatch_and_execute_tools (extracted from core_loop.rs)
+// ---------------------------------------------------------------------------
+
+/// Execute a batch of tool calls with parallel/serial partitioning, permission
+/// checks, checkpointing, verification, reflection, and episodic memory.
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn dispatch_and_execute_tools(
+    tool_calls: &[ToolCall],
+    executor: &Arc<ToolExecutor>,
+    permission_manager: &Arc<Mutex<TrustAwarePermissionManager>>,
+    config: &AgentConfig,
+    verifier: &VerifierPipeline,
+    confirmation_handler: Option<&Arc<dyn ConfirmationHandler>>,
+    runtime_checkpoint_store: Option<&RuntimeCheckpointStore>,
+    episodic_store: Option<&EpisodicMemoryStore>,
+    context_fingerprint: &str,
+    messages: &[ChatMessage],
+    iteration: usize,
+    tx: &mpsc::Sender<Result<AgentEvent>>,
+    cancellation: &CancellationToken,
+    state: &mut DispatchState<'_>,
+) -> Result<ToolDispatchOutput> {
+    let mut tool_results: Vec<ToolResult> = Vec::new();
+    let mut rollback_hint: Option<String> = None;
+    let coordinator = ToolExecutionCoordinator::new(
+        executor,
+        permission_manager,
+        &config.working_dir,
+        config,
+    );
+
+    let ToolCallBatches { parallel_calls, mut serial_calls } =
+        coordinator.partition(tool_calls);
+
+    // Execute parallel-eligible tools concurrently
+    if parallel_calls.len() > 1 {
+        let parallel_limit = coordinator.parallel_limit(parallel_calls.len());
+        tracing::info!(
+            iteration,
+            stage = AgentLoopStage::ToolDispatch.as_str(),
+            count = parallel_calls.len(),
+            max_inflight = parallel_limit,
+            tools = %parallel_calls.iter().map(|c| c.name.as_str()).collect::<Vec<_>>().join(", "),
+            "Executing read-only tools in parallel"
+        );
+
+        for call in &parallel_calls {
+            let _ = tx
+                .send(Ok(AgentEvent::ToolExecuting {
+                    id: call.id.clone(),
+                    name: call.name.clone(),
+                    input: call.input.clone(),
+                }))
+                .await;
+        }
+
+        abort_if_cancelled(cancellation, tx).await?;
+        let parallel_results =
+            execute_parallel_call_batch(executor, &parallel_calls, parallel_limit).await;
+
+        for (call, result) in &parallel_results {
+            let _ = tx
+                .send(Ok(AgentEvent::ToolResult {
+                    id: call.id.clone(),
+                    output: result.output.clone(),
+                    is_error: result.is_error,
+                }))
+                .await;
+
+            apply_verifier_decision(
+                verifier, call, result, true, tx, state.verifier_stats,
+            )
+            .await?;
+
+            state.reflector.record_result(result, &call.name);
+
+            if result.is_error && config.reflection.enabled {
+                let analysis = state.reflector.analyze(result, &call.name);
+                match &analysis.recovery_action {
+                    RecoveryAction::Stop { reason } => {
+                        let _ = tx
+                            .send(Ok(AgentEvent::Error {
+                                message: format!("Stopping: {reason}"),
+                            }))
+                            .await;
+                        return Err(AgentError::PlanningError(reason.clone()));
+                    }
+                    RecoveryAction::ReportAndContinue { message } => {
+                        let _ = tx
+                            .send(Ok(AgentEvent::Error { message: message.clone() }))
+                            .await;
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        tool_results.extend(parallel_results.into_iter().map(|(_, result)| result));
+        abort_if_cancelled(cancellation, tx).await?;
+    } else {
+        serial_calls.splice(0..0, parallel_calls.into_iter());
+    }
+
+    coordinator.prewarm_serial_calls(&serial_calls).await;
+
+    // Serial execution continues in dispatch_serial_calls
+    dispatch_serial_calls(
+        &serial_calls,
+        executor,
+        permission_manager,
+        config,
+        verifier,
+        confirmation_handler,
+        runtime_checkpoint_store,
+        episodic_store,
+        context_fingerprint,
+        messages,
+        iteration,
+        tx,
+        cancellation,
+        state,
+        &mut tool_results,
+        &mut rollback_hint,
+    )
+    .await?;
+
+    Ok(ToolDispatchOutput { tool_results, rollback_hint })
+}
+
+/// Execute serial tool calls with full permission, checkpoint, and reflection handling.
+#[allow(clippy::too_many_arguments)]
+async fn dispatch_serial_calls(
+    serial_calls: &[ToolCall],
+    executor: &Arc<ToolExecutor>,
+    permission_manager: &Arc<Mutex<TrustAwarePermissionManager>>,
+    config: &AgentConfig,
+    verifier: &VerifierPipeline,
+    confirmation_handler: Option<&Arc<dyn ConfirmationHandler>>,
+    runtime_checkpoint_store: Option<&RuntimeCheckpointStore>,
+    episodic_store: Option<&EpisodicMemoryStore>,
+    context_fingerprint: &str,
+    messages: &[ChatMessage],
+    iteration: usize,
+    tx: &mpsc::Sender<Result<AgentEvent>>,
+    cancellation: &CancellationToken,
+    state: &mut DispatchState<'_>,
+    tool_results: &mut Vec<ToolResult>,
+    rollback_hint: &mut Option<String>,
+) -> Result<()> {
+    for call in serial_calls {
+        let is_readonly =
+            executor.registry().get(&call.name).is_some_and(|t| t.is_readonly());
+        let side_effect_marker = build_side_effect_marker(call);
+
+        // Idempotent replay guard for write-capable operations.
+        if !is_readonly
+            && (state.runtime_state.applied_tool_call_ids.contains(&call.id)
+                || state.runtime_state.side_effect_markers.contains(&side_effect_marker))
+        {
+            let skipped = ToolResult::success(
+                &call.id,
+                "Skipped already-applied side-effect call during durable resume",
+            );
+            let _ = tx
+                .send(Ok(AgentEvent::ToolResult {
+                    id: call.id.clone(),
+                    output: skipped.output.clone(),
+                    is_error: skipped.is_error,
+                }))
+                .await;
+            tool_results.push(skipped);
+            continue;
+        }
+
+        state.runtime_state.pending_approvals = vec![call.id.clone()];
+        persist_runtime_checkpoint(
+            runtime_checkpoint_store,
+            config.session_id.as_deref(),
+            iteration,
+            "awaiting_confirmation",
+            messages,
+            state.runtime_state,
+            &format_runtime_tool_states(std::slice::from_ref(call), "pending_confirmation"),
+            rollback_hint.as_deref(),
+        )
+        .await?;
+
+        // Check permission and handle confirmation flow
+        match check_tool_permission(
+            call,
+            executor,
+            permission_manager,
+            confirmation_handler,
+            state.rejected_tools,
+            &config.working_dir,
+            tx,
+        )
+        .await
+        {
+            ToolPermissionOutcome::Skip(result) => {
+                state.runtime_state.pending_approvals.clear();
+                tool_results.push(result);
+                continue;
+            }
+            ToolPermissionOutcome::Proceed => {
+                state.runtime_state.pending_approvals.clear();
+            }
+        }
+
+        // Create git checkpoint before the first write operation
+        if !state.checkpoint_manager.has_checkpoint() && !is_readonly {
+            if let Ok(Some(cp)) = state.checkpoint_manager.create().await {
+                let head_sha = cp.head_sha.clone();
+                state.reflector.set_has_checkpoint(true);
+                let _ = tx.send(Ok(AgentEvent::CheckpointCreated { head_sha })).await;
+            }
+        }
+
+        // Save interrupt point before side-effects.
+        if !is_readonly {
+            persist_runtime_checkpoint(
+                runtime_checkpoint_store,
+                config.session_id.as_deref(),
+                iteration,
+                "before_side_effect",
+                messages,
+                state.runtime_state,
+                &format_runtime_tool_states(std::slice::from_ref(call), "ready"),
+                rollback_hint.as_deref(),
+            )
+            .await?;
+        }
+
+        // Send executing event
+        let _ = tx
+            .send(Ok(AgentEvent::ToolExecuting {
+                id: call.id.clone(),
+                name: call.name.clone(),
+                input: call.input.clone(),
+            }))
+            .await;
+
+        // Execute tool with cancellation barrier
+        abort_if_cancelled(cancellation, tx).await?;
+        let result = executor.execute(call).await;
+
+        // Handle path confirmation if needed
+        let result = match handle_path_confirmation(
+            call,
+            result,
+            executor,
+            confirmation_handler,
+            state.rejected_tools,
+            tx,
+            cancellation,
+        )
+        .await?
+        {
+            PathConfirmationOutcome::Continue(r) => r,
+            PathConfirmationOutcome::Skip(r) => {
+                tool_results.push(r);
+                continue;
+            }
+        };
+
+        if !is_readonly {
+            state.runtime_state.applied_tool_call_ids.insert(call.id.clone());
+            state.runtime_state.side_effect_markers.insert(side_effect_marker);
+            persist_runtime_checkpoint(
+                runtime_checkpoint_store,
+                config.session_id.as_deref(),
+                iteration,
+                "after_side_effect",
+                messages,
+                state.runtime_state,
+                &format_runtime_tool_states(std::slice::from_ref(call), "done"),
+                rollback_hint.as_deref(),
+            )
+            .await?;
+        }
+
+        // Send result event
+        let _ = tx
+            .send(Ok(AgentEvent::ToolResult {
+                id: call.id.clone(),
+                output: result.output.clone(),
+                is_error: result.is_error,
+            }))
+            .await;
+
+        apply_verifier_decision(
+            verifier, call, &result, is_readonly, tx, state.verifier_stats,
+        )
+        .await?;
+
+        // Parse plan mode markers ONLY from plan mode tools
+        if !result.is_error
+            && (call.name == "enter_plan_mode" || call.name == "exit_plan_mode")
+        {
+            match parse_plan_mode_marker(&result.output) {
+                PlanModeMarker::Enter(plan_file) => {
+                    tracing::info!(plan_file = ?plan_file, "Plan mode marker detected: entering plan mode");
+                    let _ = tx.send(Ok(AgentEvent::PlanModeEntered { plan_file })).await;
+                }
+                PlanModeMarker::Exit { saved } => {
+                    tracing::info!(saved = saved, "Plan mode marker detected: exiting plan mode");
+                    let _ = tx.send(Ok(AgentEvent::PlanModeExited { saved, plan_file: None })).await;
+                }
+                PlanModeMarker::None => {}
+            }
+        }
+
+        // Detect task completion: tests passing is a strong signal
+        if state.task_completed_at_iteration.is_none()
+            && !result.is_error
+            && call.name == "bash"
+            && is_test_command_success(&call.input, &result.output)
+        {
+            *state.task_completed_at_iteration = Some(iteration);
+            state.checkpoint_manager.clear();
+            tracing::info!(iteration = iteration, "Task completion detected: tests passed");
+        }
+
+        // Record result in reflector for error tracking
+        state.reflector.record_result(&result, &call.name);
+
+        if result.is_error && config.reflection.enabled {
+            let analysis = state.reflector.analyze(&result, &call.name);
+            let signature =
+                build_episode_signature(&call.name, analysis.error_kind, &result.output);
+            let mut episodic_strategy: Option<String> = None;
+            if let Some(store) = episodic_store {
+                if let Some(record) =
+                    store.find_latest(&signature, context_fingerprint).await?
+                {
+                    episodic_strategy = Some(record.strategy.clone());
+                    let _ = tx
+                        .send(Ok(AgentEvent::Recovery {
+                            action: "Using episodic memory hint".to_string(),
+                            suggestion: Some(record.strategy),
+                        }))
+                        .await;
+                }
+            }
+
+            if let Some(strategy) = analysis.suggestion.clone().or(episodic_strategy) {
+                *state.pending_episode = Some((signature.clone(), strategy));
+            }
+
+            if matches!(analysis.recovery_action, RecoveryAction::Rollback { .. }) {
+                persist_runtime_checkpoint(
+                    runtime_checkpoint_store,
+                    config.session_id.as_deref(),
+                    iteration,
+                    "before_rollback",
+                    messages,
+                    state.runtime_state,
+                    &format_runtime_tool_states(std::slice::from_ref(call), "rollback"),
+                    rollback_hint.as_deref(),
+                )
+                .await?;
+            }
+
+            let reflect_fut = handle_error_recovery(
+                &analysis,
+                &call.name,
+                state.reflector,
+                state.checkpoint_manager,
+                tx,
+            );
+            let recover = run_optional_stage(
+                config.experimental.graph_hybrid_runtime,
+                iteration,
+                AgentLoopStage::ReflectAndRecover,
+                reflect_fut,
+            )
+            .await?;
+            if let Some(hint) = recover {
+                *rollback_hint = Some(hint);
+            }
+        } else if !result.is_error {
+            maybe_append_episode_success(
+                episodic_store,
+                state.pending_episode,
+                context_fingerprint,
+                result.output.len() / 4,
+            )
+            .await;
+        }
+
+        tool_results.push(result);
+
+        // Honor cancellation between calls
+        abort_if_cancelled(cancellation, tx).await?;
+    }
+
+    Ok(())
 }

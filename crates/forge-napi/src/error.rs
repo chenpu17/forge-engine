@@ -1,9 +1,10 @@
 //! NAPI Error handling
 
-/// NAPI-specific error wrapper
+/// NAPI-specific error wrapper.
 pub struct NapiError(String);
 
 impl NapiError {
+    /// Create a new error from a message.
     pub fn new(msg: impl Into<String>) -> Self {
         Self(msg.into())
     }

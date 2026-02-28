@@ -1,7 +1,7 @@
 //! Read tool - Read file contents
 
 use crate::description::ToolDescriptions;
-use crate::security::validate_path;
+use crate::security::validate_path_with_confirmed;
 use crate::{ToolError, ToolExecutionContext, ToolOutput};
 use async_trait::async_trait;
 use forge_domain::Tool;
@@ -73,7 +73,7 @@ impl Tool for ReadTool {
         let limit = params["limit"].as_u64().map(|l| l as usize);
 
         // Validate path for security (path traversal, sensitive files, working dir)
-        let path = validate_path(file_path, ctx.working_dir())?;
+        let path = validate_path_with_confirmed(file_path, ctx.working_dir(), ctx.confirmed_paths())?;
 
         // Read file
         let content = tokio::fs::read_to_string(&path)

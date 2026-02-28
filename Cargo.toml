@@ -25,7 +25,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Forge Contributors"]
 license = "MIT"
-repository = "https://github.com/user/forge-engine"
+repository = "https://github.com/chenpu17/forge-engine"
 rust-version = "1.75"
 
 [workspace.dependencies]

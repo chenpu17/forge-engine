@@ -10,15 +10,39 @@ use tracing_subscriber::{
     EnvFilter,
 };
 
+/// Build a registry with filter + layer, apply common fields, and initialize.
+///
+/// The JSON and non-JSON layers have different generic types (`Json` vs `Full`),
+/// so we use a macro to avoid boxing overhead while eliminating the repeated
+/// `registry().with(filter).with(layer.with_target(...).with_file(...)).try_init()` pattern.
+macro_rules! init_with_layer {
+    ($filter:expr, $layer:expr, $init_err:expr) => {
+        tracing_subscriber::registry()
+            .with($filter)
+            .with(
+                $layer
+                    .with_target(true)
+                    .with_file(true)
+                    .with_line_number(true)
+                    .with_span_events(FmtSpan::CLOSE),
+            )
+            .try_init()
+            .map_err($init_err)
+    };
+}
+
 /// Initialize the logging system.
+///
+/// When `config.json` is true, output is formatted as structured JSON.
 ///
 /// # Errors
 /// Returns error if logging initialization fails.
-// TODO: support `config.json` flag for JSON-formatted log output
 pub fn init_logging(config: &LoggingConfig) -> Result<()> {
     let filter = EnvFilter::try_from_env("FORGE_LOG")
         .or_else(|_| EnvFilter::try_from_env("RUST_LOG"))
         .unwrap_or_else(|_| EnvFilter::new(&config.level));
+
+    let init_err = |e| InfraError::Config(format!("Failed to init logging: {e}"));
 
     match (&config.file, config.console) {
         (Some(log_path), _) => {
@@ -29,45 +53,35 @@ pub fn init_logging(config: &LoggingConfig) -> Result<()> {
                 .create(true)
                 .append(true)
                 .open(log_path)?;
-            tracing_subscriber::registry()
-                .with(filter)
-                .with(
-                    fmt::layer()
-                        .with_writer(file)
-                        .with_ansi(false)
-                        .with_target(true)
-                        .with_file(true)
-                        .with_line_number(true)
-                        .with_span_events(FmtSpan::CLOSE),
-                )
-                .try_init()
-                .map_err(|e| {
-                    InfraError::Config(format!("Failed to init logging: {e}"))
-                })?;
+
+            if config.json {
+                init_with_layer!(
+                    filter,
+                    fmt::layer().json().with_writer(file).with_ansi(false),
+                    init_err
+                )?;
+            } else {
+                init_with_layer!(
+                    filter,
+                    fmt::layer().with_writer(file).with_ansi(false),
+                    init_err
+                )?;
+            }
         }
         (None, true) => {
-            tracing_subscriber::registry()
-                .with(filter)
-                .with(
-                    fmt::layer()
-                        .with_target(true)
-                        .with_thread_ids(false)
-                        .with_file(true)
-                        .with_line_number(true)
-                        .with_span_events(FmtSpan::CLOSE),
-                )
-                .try_init()
-                .map_err(|e| {
-                    InfraError::Config(format!("Failed to init logging: {e}"))
-                })?;
+            if config.json {
+                init_with_layer!(filter, fmt::layer().json(), init_err)?;
+            } else {
+                init_with_layer!(filter, fmt::layer(), init_err)?;
+            }
         }
+        // No file, no console — register filter only so spans/events are silently discarded.
+        // This is intentional: the caller explicitly opted out of all output.
         (None, false) => {
             tracing_subscriber::registry()
                 .with(filter)
                 .try_init()
-                .map_err(|e| {
-                    InfraError::Config(format!("Failed to init logging: {e}"))
-                })?;
+                .map_err(init_err)?;
         }
     }
 

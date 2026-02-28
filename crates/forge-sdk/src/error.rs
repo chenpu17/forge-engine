@@ -167,3 +167,94 @@ impl From<forge_prompt::PromptError> for ForgeError {
 
 /// Result type for Forge SDK operations
 pub type Result<T> = std::result::Result<T, ForgeError>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_error_codes() {
+        assert_eq!(ForgeError::ConfigError("x".into()).code(), "config_error");
+        assert_eq!(ForgeError::SessionNotFound("s1".into()).code(), "session_not_found");
+        assert_eq!(ForgeError::NoActiveSession.code(), "no_active_session");
+        assert_eq!(ForgeError::AlreadyRunning.code(), "already_running");
+        assert_eq!(ForgeError::Aborted.code(), "aborted");
+        assert_eq!(ForgeError::SkillError("x".into()).code(), "skill_error");
+        assert_eq!(ForgeError::PersonaNotFound("p".into()).code(), "persona_not_found");
+        assert_eq!(ForgeError::StorageError("s".into()).code(), "storage_error");
+        assert_eq!(
+            ForgeError::SessionBusy {
+                session_id: "s1".into(),
+                inflight_request_id: "r1".into(),
+            }
+            .code(),
+            "session_busy"
+        );
+    }
+
+    #[test]
+    fn test_error_display() {
+        let err = ForgeError::ConfigError("bad value".into());
+        assert_eq!(err.to_string(), "Configuration error: bad value");
+
+        let err = ForgeError::SessionNotFound("abc".into());
+        assert_eq!(err.to_string(), "Session not found: abc");
+
+        let err = ForgeError::SessionBusy {
+            session_id: "s1".into(),
+            inflight_request_id: "r1".into(),
+        };
+        assert!(err.to_string().contains("s1"));
+        assert!(err.to_string().contains("r1"));
+    }
+
+    #[test]
+    fn test_machine_payload_structure() {
+        let err = ForgeError::ConfigError("test".into());
+        let payload = err.machine_payload();
+        assert_eq!(payload["code"], "config_error");
+        assert_eq!(payload["retryable"], false);
+        assert_eq!(payload["rate_limited"], false);
+    }
+
+    #[test]
+    fn test_session_busy_payload_includes_ids() {
+        let err = ForgeError::SessionBusy {
+            session_id: "sess-1".into(),
+            inflight_request_id: "req-1".into(),
+        };
+        let payload = err.machine_payload();
+        assert_eq!(payload["session_id"], "sess-1");
+        assert_eq!(payload["inflight_request_id"], "req-1");
+    }
+
+    #[test]
+    fn test_retryable_session_busy() {
+        let err = ForgeError::SessionBusy {
+            session_id: "s".into(),
+            inflight_request_id: "r".into(),
+        };
+        assert!(err.is_retryable());
+    }
+
+    #[test]
+    fn test_not_retryable_config_error() {
+        let err = ForgeError::ConfigError("bad".into());
+        assert!(!err.is_retryable());
+        assert!(!err.is_rate_limited());
+    }
+
+    #[test]
+    fn test_not_rate_limited_non_llm() {
+        let err = ForgeError::Aborted;
+        assert!(!err.is_rate_limited());
+        assert!(err.retry_delay().is_none());
+    }
+
+    #[test]
+    fn test_from_prompt_error() {
+        let prompt_err = forge_prompt::PromptError::Load("test".into());
+        let forge_err: ForgeError = prompt_err.into();
+        assert_eq!(forge_err.code(), "config_error");
+    }
+}

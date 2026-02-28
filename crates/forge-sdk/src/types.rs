@@ -278,6 +278,62 @@ const fn default_true() -> bool {
     true
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tool_category_for_builtin() {
+        assert_eq!(ToolInfo::category_for_builtin("read"), ToolCategory::FileSystem);
+        assert_eq!(ToolInfo::category_for_builtin("write"), ToolCategory::FileSystem);
+        assert_eq!(ToolInfo::category_for_builtin("edit"), ToolCategory::FileSystem);
+        assert_eq!(ToolInfo::category_for_builtin("glob"), ToolCategory::FileSystem);
+        assert_eq!(ToolInfo::category_for_builtin("bash"), ToolCategory::Shell);
+        assert_eq!(ToolInfo::category_for_builtin("grep"), ToolCategory::Search);
+        assert_eq!(ToolInfo::category_for_builtin("web_search"), ToolCategory::Search);
+        assert_eq!(ToolInfo::category_for_builtin("task"), ToolCategory::Task);
+        assert_eq!(ToolInfo::category_for_builtin("ask_user"), ToolCategory::Interactive);
+        assert_eq!(ToolInfo::category_for_builtin("enter_plan_mode"), ToolCategory::Planning);
+        assert_eq!(ToolInfo::category_for_builtin("mcp_something"), ToolCategory::Mcp);
+        assert_eq!(ToolInfo::category_for_builtin("unknown_tool"), ToolCategory::Other);
+    }
+
+    #[test]
+    fn test_is_network_tool() {
+        assert!(ToolInfo::is_network_tool("web_search"));
+        assert!(ToolInfo::is_network_tool("web_fetch"));
+        assert!(!ToolInfo::is_network_tool("read"));
+        assert!(!ToolInfo::is_network_tool("bash"));
+    }
+
+    #[test]
+    fn test_memory_scope_serde() {
+        let user = MemoryScope::User;
+        let json = serde_json::to_string(&user).unwrap();
+        assert_eq!(json, "\"user\"");
+        let project: MemoryScope = serde_json::from_str("\"project\"").unwrap();
+        assert_eq!(project, MemoryScope::Project);
+    }
+
+    #[test]
+    fn test_mcp_server_status_default() {
+        let status = McpServerStatus::default();
+        assert_eq!(status, McpServerStatus::Configured);
+    }
+
+    #[test]
+    fn test_mcp_transport_type_default() {
+        let transport = McpTransportType::default();
+        assert_eq!(transport, McpTransportType::Stdio);
+    }
+
+    #[test]
+    fn test_event_dispatch_mode_default() {
+        let mode = EventDispatchMode::default();
+        assert!(matches!(mode, EventDispatchMode::Immediate));
+    }
+}
+
 /// Result of testing an MCP server connection.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpConnectionTestResult {

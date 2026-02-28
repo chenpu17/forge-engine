@@ -274,3 +274,125 @@ impl Default for ObservabilityConfig {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_config_is_valid() {
+        let config = ForgeConfig::default();
+        // Default config should pass validation (working_dir comes from current_dir)
+        // We only check that defaults are sensible
+        assert_eq!(config.default_persona, "coder");
+        assert_eq!(config.llm.provider, "anthropic");
+        assert_eq!(config.llm.max_tokens, 8192);
+        assert_eq!(config.tools.bash_timeout, 120);
+        assert_eq!(config.tools.max_output_size, 50_000);
+        assert!(config.tools.require_confirmation);
+    }
+
+    #[test]
+    fn test_with_working_dir() {
+        let config = ForgeConfig::with_working_dir("/tmp/test");
+        assert_eq!(config.working_dir, PathBuf::from("/tmp/test"));
+        assert_eq!(config.default_persona, "coder");
+    }
+
+    #[test]
+    fn test_validate_empty_working_dir() {
+        let mut config = ForgeConfig::default();
+        config.working_dir = PathBuf::new();
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("working_dir must not be empty"));
+    }
+
+    #[test]
+    fn test_validate_zero_max_tokens() {
+        let mut config = ForgeConfig::with_working_dir("/tmp");
+        config.llm.max_tokens = 0;
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("llm.max_tokens must be > 0"));
+    }
+
+    #[test]
+    fn test_validate_zero_bash_timeout() {
+        let mut config = ForgeConfig::with_working_dir("/tmp");
+        config.tools.bash_timeout = 0;
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("tools.bash_timeout must be > 0"));
+    }
+
+    #[test]
+    fn test_validate_zero_max_output_size() {
+        let mut config = ForgeConfig::with_working_dir("/tmp");
+        config.tools.max_output_size = 0;
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("tools.max_output_size must be > 0"));
+    }
+
+    #[test]
+    fn test_validate_bad_sample_rate() {
+        let mut config = ForgeConfig::with_working_dir("/tmp");
+        config.observability.enabled = true;
+        config.observability.sample_rate = 1.5;
+        let err = config.validate().unwrap_err();
+        assert!(err.to_string().contains("sample_rate"));
+    }
+
+    #[test]
+    fn test_validate_multiple_errors() {
+        let mut config = ForgeConfig::default();
+        config.working_dir = PathBuf::new();
+        config.llm.max_tokens = 0;
+        config.tools.bash_timeout = 0;
+        let err = config.validate().unwrap_err();
+        let msg = err.to_string();
+        // Should contain multiple errors separated by "; "
+        assert!(msg.contains("working_dir"));
+        assert!(msg.contains("max_tokens"));
+        assert!(msg.contains("bash_timeout"));
+    }
+
+    #[test]
+    fn test_validate_valid_config() {
+        let config = ForgeConfig::with_working_dir("/tmp");
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_llm_effective_temperature_default() {
+        // Skip if FORGE_LLM_TEMPERATURE is set — it overrides the default.
+        if std::env::var("FORGE_LLM_TEMPERATURE").is_ok() {
+            eprintln!("SKIPPED: test_llm_effective_temperature_default (FORGE_LLM_TEMPERATURE is set)");
+            return;
+        }
+        let settings = LlmSettings::default();
+        assert!((settings.effective_temperature() - 0.7).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_llm_effective_temperature_override() {
+        // Explicit temperature takes priority over env var, so this is safe.
+        let mut settings = LlmSettings::default();
+        settings.temperature = Some(0.3);
+        assert!((settings.effective_temperature() - 0.3).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_config_serde_roundtrip() {
+        let config = ForgeConfig::with_working_dir("/tmp/test");
+        let json = serde_json::to_string(&config).unwrap();
+        let deserialized: ForgeConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.working_dir, config.working_dir);
+        assert_eq!(deserialized.default_persona, config.default_persona);
+    }
+
+    #[test]
+    fn test_observability_disabled_ignores_sample_rate() {
+        let mut config = ForgeConfig::with_working_dir("/tmp");
+        config.observability.enabled = false;
+        config.observability.sample_rate = 99.0; // invalid but disabled
+        assert!(config.validate().is_ok());
+    }
+}

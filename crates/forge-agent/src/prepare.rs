@@ -258,6 +258,85 @@ fn is_context_overflow_error(error: &str) -> bool {
 }
 
 // ---------------------------------------------------------------------------
+// Plan mode marker
+// ---------------------------------------------------------------------------
+
+/// Plan mode marker parsing result
+#[derive(Debug)]
+pub(crate) enum PlanModeMarker {
+    /// Entered plan mode with optional plan file path
+    Enter(Option<String>),
+    /// Exited plan mode (saved: bool)
+    Exit { saved: bool },
+    /// No marker found
+    None,
+}
+
+/// The tools emit markers in this format:
+/// - `__PLAN_MODE_ENTER__:{plan_file_path}` when entering plan mode
+/// - `__PLAN_MODE_EXIT__:saved` or `__PLAN_MODE_EXIT__:not_saved` when exiting
+pub(crate) fn parse_plan_mode_marker(output: &str) -> PlanModeMarker {
+    // Check for enter marker
+    if let Some(pos) = output.find("__PLAN_MODE_ENTER__:") {
+        let start = pos + "__PLAN_MODE_ENTER__:".len();
+        let rest = &output[start..];
+        let path = rest.lines().next().map(|s| s.trim().to_string());
+        return PlanModeMarker::Enter(path.filter(|s| !s.is_empty()));
+    }
+
+    // Check for exit marker
+    if output.contains("__PLAN_MODE_EXIT__:saved") {
+        return PlanModeMarker::Exit { saved: true };
+    }
+    if output.contains("__PLAN_MODE_EXIT__:not_saved") {
+        return PlanModeMarker::Exit { saved: false };
+    }
+
+    PlanModeMarker::None
+}
+
+/// Check if a bash command is a test command that succeeded
+pub(crate) fn is_test_command_success(input: &serde_json::Value, output: &str) -> bool {
+    // Extract command from input
+    let command = input.get("command").and_then(|v| v.as_str()).unwrap_or("");
+
+    // Check if it's a test command
+    let is_test_command = command.contains("npm test")
+        || command.contains("npm run test")
+        || command.contains("yarn test")
+        || command.contains("pnpm test")
+        || command.contains("cargo test")
+        || command.contains("pytest")
+        || command.contains("go test")
+        || command.contains("jest")
+        || command.contains("vitest")
+        || command.contains("node --test");
+
+    if !is_test_command {
+        return false;
+    }
+
+    // Check if output indicates success
+    let output_lower = output.to_lowercase();
+
+    let has_success_indicator = output.contains("Exit code: 0")
+        || output.contains("exit code: 0")
+        || output_lower.contains("all tests passed")
+        || output_lower.contains("tests passed")
+        || (output_lower.contains("# pass") && !output_lower.contains("# fail 1"));
+
+    let has_failure_indicator = output.contains("Exit code: 1")
+        || output.contains("exit code: 1")
+        || output_lower.contains("failed")
+        || output_lower.contains("failure")
+        || output_lower.contains("error:")
+        || output_lower.contains("# fail 1")
+        || output_lower.contains("not ok");
+
+    has_success_indicator && !has_failure_indicator
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -332,5 +411,57 @@ mod tests {
         assert!(is_context_overflow_error("input is too long"));
         assert!(!is_context_overflow_error("rate limit exceeded"));
         assert!(!is_context_overflow_error("authentication failed"));
+    }
+
+    #[test]
+    fn test_parse_plan_mode_marker_enter() {
+        use super::{parse_plan_mode_marker, PlanModeMarker};
+        let output = "Entering plan mode.\n\n__PLAN_MODE_ENTER__:/path/to/plan.md";
+        match parse_plan_mode_marker(output) {
+            PlanModeMarker::Enter(Some(path)) => {
+                assert_eq!(path, "/path/to/plan.md");
+            }
+            _ => panic!("Expected Enter marker with path"),
+        }
+    }
+
+    #[test]
+    fn test_parse_plan_mode_marker_enter_empty_path() {
+        use super::{parse_plan_mode_marker, PlanModeMarker};
+        let output = "Entering plan mode.\n\n__PLAN_MODE_ENTER__:";
+        match parse_plan_mode_marker(output) {
+            PlanModeMarker::Enter(None) => {}
+            _ => panic!("Expected Enter marker with empty path"),
+        }
+    }
+
+    #[test]
+    fn test_parse_plan_mode_marker_exit_saved() {
+        use super::{parse_plan_mode_marker, PlanModeMarker};
+        let output = "Exiting plan mode.\n\n__PLAN_MODE_EXIT__:saved";
+        match parse_plan_mode_marker(output) {
+            PlanModeMarker::Exit { saved: true } => {}
+            _ => panic!("Expected Exit marker with saved=true"),
+        }
+    }
+
+    #[test]
+    fn test_parse_plan_mode_marker_exit_not_saved() {
+        use super::{parse_plan_mode_marker, PlanModeMarker};
+        let output = "Exiting plan mode.\n\n__PLAN_MODE_EXIT__:not_saved";
+        match parse_plan_mode_marker(output) {
+            PlanModeMarker::Exit { saved: false } => {}
+            _ => panic!("Expected Exit marker with saved=false"),
+        }
+    }
+
+    #[test]
+    fn test_parse_plan_mode_marker_none() {
+        use super::{parse_plan_mode_marker, PlanModeMarker};
+        let output = "Just some regular tool output without any markers";
+        match parse_plan_mode_marker(output) {
+            PlanModeMarker::None => {}
+            _ => panic!("Expected no marker"),
+        }
     }
 }

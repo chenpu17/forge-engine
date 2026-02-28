@@ -105,6 +105,44 @@ impl PermissionCheckResult {
     pub const fn is_hard_blocked(&self) -> bool {
         matches!(self, Self::HardBlocked { .. })
     }
+
+    /// Convert a `PathValidation` result into a `PermissionCheckResult`.
+    ///
+    /// Mapping:
+    /// - `Safe` → `Allowed`
+    /// - `PathTraversal` → `HardBlocked`
+    /// - `SensitiveFile` → `HardBlocked`
+    /// - `SensitiveFileConfirm` → `NeedsConfirmation(Always)`
+    /// - `OutsideWorkingDir` → `NeedsConfirmation(Once)`
+    #[must_use]
+    pub fn from_path_validation(validation: crate::security::PathValidation) -> Self {
+        use crate::security::PathValidation;
+        match validation {
+            PathValidation::Safe(_) => Self::Allowed,
+            PathValidation::PathTraversal(msg) => Self::HardBlocked {
+                reason: HardBlockReason::Custom(format!("Path traversal blocked: {msg}")),
+            },
+            PathValidation::SensitiveFile(msg) => Self::HardBlocked {
+                reason: HardBlockReason::Custom(format!("Sensitive file blocked: {msg}")),
+            },
+            PathValidation::SensitiveFileConfirm { path, reason } => Self::NeedsConfirmation {
+                level: ConfirmationLevel::Always,
+                reason: Some(format!(
+                    "Path '{}' requires confirmation: {}",
+                    path.display(),
+                    reason
+                )),
+            },
+            PathValidation::OutsideWorkingDir { path, working_dir } => Self::NeedsConfirmation {
+                level: ConfirmationLevel::Once,
+                reason: Some(format!(
+                    "Path '{}' is outside working directory '{}'",
+                    path.display(),
+                    working_dir.display()
+                )),
+            },
+        }
+    }
 }
 
 impl From<PermissionCheck> for PermissionCheckResult {
@@ -343,6 +381,8 @@ pub struct TrustAwarePermissionManager {
     permission_policy: PermissionPolicy,
     /// Project root for boundary detection
     project_root: Option<PathBuf>,
+    /// Path security validator
+    path_security: crate::security::PathSecurity,
 }
 
 impl TrustAwarePermissionManager {
@@ -355,6 +395,7 @@ impl TrustAwarePermissionManager {
             hardcoded_safety: HardcodedSafety::new(),
             permission_policy: PermissionPolicy::new(),
             project_root: None,
+            path_security: crate::security::PathSecurity::default(),
         }
     }
 
@@ -417,6 +458,17 @@ impl TrustAwarePermissionManager {
     /// This delegates to the base permission manager for "Once" level caching.
     pub fn record_confirmation(&mut self, tool: &str, params: &Value) {
         self.base.record_confirmation(tool, params);
+    }
+
+    /// Check a file path against the path security validator.
+    ///
+    /// Returns a `PermissionCheckResult` derived from the `PathValidation` outcome.
+    /// This allows callers to handle path security through the same permission
+    /// pipeline used for tool-level checks.
+    #[must_use]
+    pub fn check_path(&self, path: &str, working_dir: &Path) -> PermissionCheckResult {
+        let validation = self.path_security.validate(path, working_dir);
+        PermissionCheckResult::from_path_validation(validation)
     }
 
     /// Check permission with trust level and hardcoded safety

@@ -145,6 +145,10 @@ impl ToolExecutionContext for ToolContext {
         self.timeout_secs
     }
 
+    fn confirmed_paths(&self) -> &std::collections::HashSet<std::path::PathBuf> {
+        &self.confirmed_paths
+    }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }

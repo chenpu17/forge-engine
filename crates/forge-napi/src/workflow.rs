@@ -3,11 +3,13 @@
 use napi_derive::napi;
 use forge_workflow::Position;
 
-/// Position in the workflow editor
+/// Position in the workflow editor.
 #[napi(object)]
 #[derive(Debug, Clone)]
 pub struct JsPosition {
+    /// X coordinate.
     pub x: f64,
+    /// Y coordinate.
     pub y: f64,
 }
 

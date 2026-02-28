@@ -3,13 +3,18 @@
 //! Analyzes tool results, classifies errors, and provides
 //! recovery suggestions and retry decisions.
 
-use crate::ReflectionConfig;
+use crate::{AgentError, LoopProtectionConfig, ReflectionConfig};
+use crate::checkpoint::GitCheckpointManager;
+use crate::episodic_memory::{EpisodeRecord, EpisodicMemoryStore};
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder, MatchKind};
-use forge_domain::ToolResult;
+use chrono::Utc;
+use forge_domain::{AgentEvent, ToolResult};
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::OnceLock;
-use std::time::Duration;
+use std::time::{Duration, Instant};
+use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
 
 /// Error classification
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -811,6 +816,149 @@ impl Reflector {
     pub fn should_stop(&self, min_calls: usize, max_error_rate: f64) -> bool {
         self.total_calls >= min_calls && self.error_rate() > max_error_rate
     }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers extracted from core_loop.rs
+// ---------------------------------------------------------------------------
+
+/// Build a signature string for episodic memory deduplication.
+pub(crate) fn build_episode_signature(
+    tool_name: &str,
+    error_kind: Option<ErrorKind>,
+    output: &str,
+) -> String {
+    let kind = error_kind.unwrap_or(ErrorKind::Unknown);
+    let head = output.lines().next().unwrap_or("").trim();
+    format!("{kind:?}:{tool_name}:{head}")
+}
+
+/// If a pending episode exists, record it as a success in the episodic store.
+pub(crate) async fn maybe_append_episode_success(
+    store: Option<&EpisodicMemoryStore>,
+    pending_episode: &mut Option<(String, String)>,
+    context_fingerprint: &str,
+    tokens_used: usize,
+) {
+    let Some(store) = store else {
+        return;
+    };
+    let Some((signature, strategy)) = pending_episode.take() else {
+        return;
+    };
+
+    let record = EpisodeRecord {
+        signature,
+        context_fingerprint: context_fingerprint.to_string(),
+        strategy,
+        success: true,
+        tokens_used,
+        created_at: Utc::now(),
+    };
+    if let Err(e) = store.append_success(record).await {
+        tracing::warn!(error = %e, "Failed to append episodic memory");
+    }
+}
+
+/// Handle error recovery based on the reflector's analysis.
+pub(crate) async fn handle_error_recovery(
+    analysis: &ReflectionResult,
+    _tool_name: &str,
+    reflector: &mut Reflector,
+    checkpoint_manager: &mut GitCheckpointManager,
+    tx: &mpsc::Sender<crate::Result<AgentEvent>>,
+) -> crate::Result<Option<String>> {
+    match &analysis.recovery_action {
+        RecoveryAction::Retry { delay, max_retries } => {
+            let _ = tx
+                .send(Ok(AgentEvent::Recovery {
+                    action: format!(
+                        "Retrying after {}ms (max {} retries)",
+                        delay.as_millis(),
+                        max_retries
+                    ),
+                    suggestion: analysis.suggestion.clone(),
+                }))
+                .await;
+        }
+        RecoveryAction::TryAlternative { hint } => {
+            let _ = tx
+                .send(Ok(AgentEvent::Recovery {
+                    action: "Trying alternative approach".to_string(),
+                    suggestion: Some(hint.clone()),
+                }))
+                .await;
+        }
+        RecoveryAction::ReportAndContinue { message } => {
+            let _ = tx
+                .send(Ok(AgentEvent::Recovery {
+                    action: "Continuing despite error".to_string(),
+                    suggestion: Some(message.clone()),
+                }))
+                .await;
+        }
+        RecoveryAction::TryCompression { hint } => {
+            let _ = tx
+                .send(Ok(AgentEvent::Recovery {
+                    action: "Attempting context compression".to_string(),
+                    suggestion: Some(hint.clone()),
+                }))
+                .await;
+        }
+        RecoveryAction::Rollback { reason } => match checkpoint_manager.rollback().await {
+            Ok(report) => {
+                let _ = tx
+                    .send(Ok(AgentEvent::RolledBack {
+                        reason: reason.clone(),
+                        files_restored: report.files_count,
+                    }))
+                    .await;
+
+                reflector.reset_counters();
+                reflector.record_rollback();
+
+                return Ok(Some(format!(
+                    "[System] The working tree was rolled back because: {reason}. \
+                         All file changes have been reverted. \
+                         Please try a completely different approach."
+                )));
+            }
+            Err(e) => {
+                tracing::error!("Rollback failed: {}", e);
+                let _ = tx
+                    .send(Ok(AgentEvent::Error { message: format!("Stopping: {reason}") }))
+                    .await;
+                return Err(AgentError::PlanningError(reason.clone()));
+            }
+        },
+        RecoveryAction::Stop { reason } => {
+            let _ =
+                tx.send(Ok(AgentEvent::Error { message: format!("Stopping: {reason}") })).await;
+            return Err(AgentError::PlanningError(reason.clone()));
+        }
+        RecoveryAction::Skip => {}
+    }
+
+    Ok(None)
+}
+
+/// Check loop protection constraints (max iterations, timeout, cancellation).
+pub(crate) fn check_loop_protection(
+    config: &LoopProtectionConfig,
+    iteration: usize,
+    start_time: Instant,
+    cancellation: &CancellationToken,
+) -> crate::Result<()> {
+    if cancellation.is_cancelled() {
+        return Err(AgentError::Aborted);
+    }
+    if iteration > config.max_iterations {
+        return Err(AgentError::MaxIterations(config.max_iterations));
+    }
+    if start_time.elapsed().as_secs() > config.total_timeout_secs {
+        return Err(AgentError::Timeout(config.total_timeout_secs));
+    }
+    Ok(())
 }
 
 #[cfg(test)]

@@ -45,6 +45,8 @@ pub enum HardBlockReason {
         /// The command that was blocked
         command: String,
     },
+    /// Custom hard block reason (e.g., path security violations)
+    Custom(String),
 }
 
 impl std::fmt::Display for HardBlockReason {
@@ -65,6 +67,7 @@ impl std::fmt::Display for HardBlockReason {
             Self::RemoteCodeExecution { command } => {
                 write!(f, "Remote code execution blocked: {command}")
             }
+            Self::Custom(msg) => write!(f, "{msg}"),
         }
     }
 }
