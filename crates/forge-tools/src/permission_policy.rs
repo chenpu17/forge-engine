@@ -361,6 +361,102 @@ impl Default for PermissionPolicy {
     }
 }
 
+// ---------------------------------------------------------------------------
+// WhitelistRule — command prefix matching for shell tools
+// ---------------------------------------------------------------------------
+
+/// A parsed whitelist rule
+#[derive(Debug, Clone)]
+pub struct WhitelistRule {
+    /// Tool name (e.g., "Bash", "bash")
+    pub tool: String,
+    /// Command prefix (e.g., "git", "npm")
+    pub command_prefix: String,
+    /// Pattern to match after prefix (e.g., "*", "status")
+    pub pattern: String,
+}
+
+impl WhitelistRule {
+    /// Parse a whitelist rule from string format "Tool(command:pattern)"
+    /// Examples: "Bash(git:*)", "Bash(npm run:*)", "Bash(cargo:build)"
+    #[must_use]
+    pub fn parse(rule: &str) -> Option<Self> {
+        let rule = rule.trim();
+        let paren_start = rule.find('(')?;
+        let paren_end = rule.rfind(')')?;
+        if paren_end <= paren_start {
+            return None;
+        }
+        let tool = rule[..paren_start].trim().to_lowercase();
+        let inner = &rule[paren_start + 1..paren_end];
+        let colon_pos = inner.find(':')?;
+        let command_prefix = inner[..colon_pos].trim().to_string();
+        let pattern = inner[colon_pos + 1..].trim().to_string();
+        Some(Self { tool, command_prefix, pattern })
+    }
+
+    /// Check if a command matches this whitelist rule
+    #[must_use]
+    pub fn matches(&self, tool: &str, command: &str) -> bool {
+        if tool.to_lowercase() != self.tool {
+            return false;
+        }
+        let command_trimmed = command.trim();
+        if !command_trimmed.starts_with(&self.command_prefix) {
+            return false;
+        }
+        let rest = &command_trimmed[self.command_prefix.len()..];
+        if !rest.is_empty() && !rest.starts_with(' ') && !rest.starts_with(':') {
+            return false;
+        }
+        match self.pattern.as_str() {
+            "*" => true,
+            pattern => {
+                if rest.is_empty() {
+                    pattern.is_empty() || pattern == "*"
+                } else {
+                    pattern == "*" || rest.trim_start().starts_with(pattern)
+                }
+            }
+        }
+    }
+}
+
+/// Default whitelist rules for common safe commands
+pub fn default_whitelist_rules() -> Vec<String> {
+    vec![
+        "Bash(git:*)".to_string(),
+        "Bash(npm:*)".to_string(),
+        "Bash(npm run:*)".to_string(),
+        "Bash(npx:*)".to_string(),
+        "Bash(yarn:*)".to_string(),
+        "Bash(pnpm:*)".to_string(),
+        "Bash(cargo:*)".to_string(),
+        "Bash(pip:*)".to_string(),
+        "Bash(pip3:*)".to_string(),
+        "Bash(make:*)".to_string(),
+        "Bash(cmake:*)".to_string(),
+        "Bash(ls:*)".to_string(),
+        "Bash(pwd:*)".to_string(),
+        "Bash(cd:*)".to_string(),
+        "Bash(cat:*)".to_string(),
+        "Bash(head:*)".to_string(),
+        "Bash(tail:*)".to_string(),
+        "Bash(echo:*)".to_string(),
+        "Bash(which:*)".to_string(),
+        "Bash(whoami:*)".to_string(),
+        "Bash(python:*)".to_string(),
+        "Bash(python3:*)".to_string(),
+        "Bash(node:*)".to_string(),
+        "Bash(go:*)".to_string(),
+        "Bash(rustc:*)".to_string(),
+        "Bash(pytest:*)".to_string(),
+        "Bash(jest:*)".to_string(),
+        "Bash(curl:*localhost:*)".to_string(),
+        "Bash(curl:*127.0.0.1:*)".to_string(),
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -608,5 +704,41 @@ mod tests {
             &wd(),
         );
         assert!(matches!(result, PolicyResult::Denied { .. }));
+    }
+
+    // --- WhitelistRule tests ---
+
+    #[test]
+    fn test_whitelist_rule_parse() {
+        let rule = WhitelistRule::parse("Bash(git:*)").unwrap();
+        assert_eq!(rule.tool, "bash");
+        assert_eq!(rule.command_prefix, "git");
+        assert_eq!(rule.pattern, "*");
+
+        let rule = WhitelistRule::parse("Bash(npm run:*)").unwrap();
+        assert_eq!(rule.command_prefix, "npm run");
+
+        assert!(WhitelistRule::parse("invalid").is_none());
+        assert!(WhitelistRule::parse("Bash()").is_none());
+        assert!(WhitelistRule::parse("Bash(nocolon)").is_none());
+    }
+
+    #[test]
+    fn test_whitelist_rule_matches() {
+        let rule = WhitelistRule::parse("Bash(git:*)").unwrap();
+        assert!(rule.matches("bash", "git status"));
+        assert!(rule.matches("bash", "git commit -m 'test'"));
+        assert!(rule.matches("Bash", "git pull"));
+        assert!(!rule.matches("bash", "gitk"));
+        assert!(!rule.matches("bash", "echo git"));
+        assert!(!rule.matches("read", "git status"));
+    }
+
+    #[test]
+    fn test_whitelist_rule_specific_pattern() {
+        let rule = WhitelistRule::parse("Bash(cargo:build)").unwrap();
+        assert!(rule.matches("bash", "cargo build"));
+        assert!(rule.matches("bash", "cargo build --release"));
+        assert!(!rule.matches("bash", "cargo test"));
     }
 }

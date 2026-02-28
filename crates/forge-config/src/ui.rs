@@ -24,9 +24,9 @@ pub struct UiConfig {
     /// Theme name.
     #[serde(default = "default_theme")]
     pub theme: String,
-    /// Enable syntax highlighting.
-    #[serde(default = "default_true")]
-    pub syntax_highlighting: bool,
+    /// Enable content highlighting (syntax, markdown, etc.).
+    #[serde(default = "default_true", alias = "syntax_highlighting")]
+    pub content_highlighting: bool,
     /// Show line numbers.
     #[serde(default = "default_true")]
     pub line_numbers: bool,
@@ -45,7 +45,7 @@ impl Default for UiConfig {
         Self {
             language: default_language(),
             theme: default_theme(),
-            syntax_highlighting: true,
+            content_highlighting: true,
             line_numbers: true,
             mouse_enabled: true,
             show_timestamps: false,

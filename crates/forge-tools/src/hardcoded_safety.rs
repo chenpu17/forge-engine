@@ -5,11 +5,69 @@
 
 use std::sync::LazyLock;
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
 use crate::path_utils::normalize_path;
-use crate::trust_level::HardBlockReason;
+
+/// Reason for hard blocking an operation
+///
+/// Hard blocks cannot be bypassed even in Yolo mode.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum HardBlockReason {
+    /// Attempted to access a system-protected path
+    SystemPath {
+        /// The path that was blocked
+        path: PathBuf,
+        /// Human-readable description
+        description: String,
+    },
+    /// Attempted to execute a destructive command
+    DestructiveCommand {
+        /// The command that was blocked
+        command: String,
+        /// The pattern that matched
+        pattern: String,
+    },
+    /// Attempted a mass operation exceeding threshold
+    MassOperation {
+        /// Type of operation (e.g., "delete", "write")
+        operation: String,
+        /// Number of items affected
+        count: usize,
+        /// Threshold that was exceeded
+        threshold: usize,
+    },
+    /// Attempted remote code execution
+    RemoteCodeExecution {
+        /// The command that was blocked
+        command: String,
+    },
+}
+
+impl std::fmt::Display for HardBlockReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::SystemPath { path, description } => {
+                write!(f, "System path blocked: {} - {}", path.display(), description)
+            }
+            Self::DestructiveCommand { command, pattern } => {
+                write!(f, "Destructive command blocked: {command} (matched: {pattern})")
+            }
+            Self::MassOperation { operation, count, threshold } => {
+                write!(
+                    f,
+                    "Mass {operation} blocked: {count} items exceeds threshold of {threshold}"
+                )
+            }
+            Self::RemoteCodeExecution { command } => {
+                write!(f, "Remote code execution blocked: {command}")
+            }
+        }
+    }
+}
 
 /// Hardcoded safety checker
 ///

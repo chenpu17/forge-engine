@@ -1,7 +1,7 @@
 //! Shared path utilities for normalization and boundary checking.
 //!
 //! Provides a single implementation of lexical path normalization used across
-//! permission policy, trust permission, and LSP tool modules.
+//! permission policy, trust permission, and tool extension modules.
 
 use std::path::{Component, Path, PathBuf};
 

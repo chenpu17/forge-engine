@@ -24,7 +24,7 @@ Use this tool when:
 
 Available sub-agent types:
 - general-purpose: For complex multi-step tasks (coding, file modification, testing)
-- explore: Fast codebase exploration (finding files, searching code)
+- explore: Fast project exploration (finding files, searching content)
 - plan: Designing implementation strategies
 - research: Gathering information from documentation
 - writer: Content creation, document writing, reports, emails, proposals
@@ -75,9 +75,9 @@ impl std::fmt::Display for ModelTier {
 pub enum SubAgentType {
     /// General-purpose agent for complex tasks
     GeneralPurpose,
-    /// Fast agent for exploring codebases
+    /// Fast agent for exploring projects
     Explore,
-    /// Software architect agent for planning
+    /// Planner agent for designing strategies
     Plan,
     /// Agent for researching documentation
     Research,
@@ -109,10 +109,10 @@ impl SubAgentType {
                 "General-purpose agent for researching complex questions, searching for code, and executing multi-step tasks"
             }
             Self::Explore => {
-                "Fast agent specialized for exploring codebases - finding files, searching code, answering questions about architecture"
+                "Fast agent specialized for exploring projects - finding files, searching content, answering questions about structure"
             }
             Self::Plan => {
-                "Software architect agent for designing implementation plans with step-by-step strategies"
+                "Planner agent for designing implementation plans with step-by-step strategies"
             }
             Self::Research => {
                 "Agent for researching documentation, APIs, and gathering information from various sources"

@@ -14,6 +14,10 @@ members = [
     "crates/forge-tools-coding",
     "crates/forge-workflow",
     "crates/forge-agent",
+    "crates/forge-sdk",
+    "crates/forge-napi",
+    "crates/forge-python",
+    "tests/integration",
 ]
 
 [workspace.package]
@@ -90,6 +94,7 @@ forge-mcp = { path = "crates/forge-mcp" }
 forge-tools-coding = { path = "crates/forge-tools-coding" }
 forge-workflow = { path = "crates/forge-workflow" }
 forge-agent = { path = "crates/forge-agent" }
+forge-sdk = { path = "crates/forge-sdk" }
 
 [workspace.lints.rust]
 unsafe_code = "deny"

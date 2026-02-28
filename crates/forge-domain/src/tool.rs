@@ -13,7 +13,7 @@ use serde_json::Value;
 /// Minimal execution context passed to tools.
 ///
 /// `forge-tools` provides the concrete `ToolContext` that implements this trait
-/// with additional fields (sandbox, LSP, background manager, etc.).
+/// with additional fields (sandbox, background manager, optional extensions, etc.).
 ///
 /// The `'static` bound enables downcasting via [`as_any()`](Self::as_any)
 /// for tools that need access to concrete context fields.
@@ -35,7 +35,7 @@ pub trait ToolExecutionContext: Send + Sync + 'static {
 
     /// Downcast to `&dyn Any` for concrete type access.
     ///
-    /// Tools that need access to concrete context fields (e.g. LSP manager)
+    /// Tools that need access to concrete context fields (e.g. extension managers)
     /// can downcast via this method.
     fn as_any(&self) -> &dyn std::any::Any;
 }

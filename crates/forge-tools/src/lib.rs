@@ -15,14 +15,12 @@ pub mod hardcoded_safety;
 pub mod metrics;
 pub mod params;
 pub mod path_utils;
-pub mod permission;
 pub mod permission_policy;
 pub mod platform;
 pub mod plugin;
 pub mod security;
 pub mod schema;
 pub mod shell_path;
-pub mod trust_level;
 pub mod trust_permission;
 
 // Re-export background task types

@@ -10,7 +10,7 @@ use serde_json::{json, Value};
 use std::sync::OnceLock;
 
 /// Fallback description when external markdown is not available
-const FALLBACK_DESCRIPTION: &str = "Enter plan mode for read-only exploration.\n\nIn plan mode:\n- You can only use read-only tools (read, glob, grep, web_fetch, web_search, task_output)\n- Write operations (write, edit, bash, git) are disabled\n- Use this to explore codebases and design implementation strategies safely\n\nParameters:\n- plan_file: Optional path for the plan file (default: auto-generated in ~/.forge/plans/)\n\nCall exit_plan_mode when ready to execute your plan.";
+const FALLBACK_DESCRIPTION: &str = "Enter plan mode for read-only exploration.\n\nIn plan mode:\n- You can only use read-only tools (read, glob, grep, web_fetch, web_search, task_output)\n- Write operations (write, edit, bash, git) are disabled\n- Use this to explore projects and design implementation strategies safely\n\nParameters:\n- plan_file: Optional path for the plan file (default: auto-generated in ~/.forge/plans/)\n\nCall exit_plan_mode when ready to execute your plan.";
 
 /// `EnterPlanMode` tool for switching to read-only mode
 pub struct EnterPlanModeTool;

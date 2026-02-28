@@ -2,6 +2,10 @@
 //!
 //! This module implements the `/init` command functionality, which uses an Explore
 //! sub-agent to analyze the project structure and generate a FORGE.md file.
+//!
+//! NOTE: This module contains coding-specific terminology (e.g. "codebase", "lint")
+//! by design — project analysis is inherently a coding/development feature.
+//! When forge-engine is used for non-coding personas, this module is not invoked.
 
 use crate::{
     AgentConfig, GenerationConfig, LoopProtectionConfig, ReflectionConfig,

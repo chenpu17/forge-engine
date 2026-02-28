@@ -6,8 +6,7 @@
 use crate::executor::ToolExecutor;
 use crate::{AgentConfig, AgentError, ConfirmationHandler, ConfirmationLevel, LoopProtectionConfig, Result};
 use forge_domain::{AgentEvent, ToolCall, ToolResult};
-use forge_tools::trust_level::PermissionCheckResult;
-use forge_tools::trust_permission::TrustAwarePermissionManager;
+use forge_tools::trust_permission::{PermissionCheckResult, TrustAwarePermissionManager};
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
