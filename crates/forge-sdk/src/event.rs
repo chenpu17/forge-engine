@@ -32,10 +32,7 @@ pub trait AgentEventExt {
 
 impl AgentEventExt for AgentEvent {
     fn is_terminal(&self) -> bool {
-        matches!(
-            self,
-            Self::Done { .. } | Self::Cancelled | Self::Error { .. }
-        )
+        matches!(self, Self::Done { .. } | Self::Cancelled | Self::Error { .. })
     }
 
     fn is_error(&self) -> bool {

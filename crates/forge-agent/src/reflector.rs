@@ -3,9 +3,9 @@
 //! Analyzes tool results, classifies errors, and provides
 //! recovery suggestions and retry decisions.
 
-use crate::{AgentError, LoopProtectionConfig, ReflectionConfig};
 use crate::checkpoint::GitCheckpointManager;
 use crate::episodic_memory::{EpisodeRecord, EpisodicMemoryStore};
+use crate::{AgentError, LoopProtectionConfig, ReflectionConfig};
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder, MatchKind};
 use chrono::Utc;
 use forge_domain::{AgentEvent, ToolResult};
@@ -617,8 +617,7 @@ impl Reflector {
         let retry_delay = error_kind.retry_delay();
 
         let suggestion = Self::suggest_recovery(error_kind, &result.output);
-        let recovery_action =
-            self.determine_recovery_action(error_kind, &result.output, tool_name);
+        let recovery_action = self.determine_recovery_action(error_kind, &result.output, tool_name);
 
         ReflectionResult {
             success: false,
@@ -925,15 +924,13 @@ pub(crate) async fn handle_error_recovery(
             }
             Err(e) => {
                 tracing::error!("Rollback failed: {}", e);
-                let _ = tx
-                    .send(Ok(AgentEvent::Error { message: format!("Stopping: {reason}") }))
-                    .await;
+                let _ =
+                    tx.send(Ok(AgentEvent::Error { message: format!("Stopping: {reason}") })).await;
                 return Err(AgentError::PlanningError(reason.clone()));
             }
         },
         RecoveryAction::Stop { reason } => {
-            let _ =
-                tx.send(Ok(AgentEvent::Error { message: format!("Stopping: {reason}") })).await;
+            let _ = tx.send(Ok(AgentEvent::Error { message: format!("Stopping: {reason}") })).await;
             return Err(AgentError::PlanningError(reason.clone()));
         }
         RecoveryAction::Skip => {}

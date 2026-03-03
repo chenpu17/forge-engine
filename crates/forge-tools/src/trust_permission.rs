@@ -27,7 +27,9 @@ use crate::ConfirmationLevel;
 ///
 /// Higher levels provide more convenience but less security.
 /// All levels are still subject to the hardcoded safety layer.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum TrustLevel {
     /// Cautious mode - all write operations need confirmation
@@ -259,11 +261,27 @@ impl PermissionManager {
     #[must_use]
     pub fn new(config: PermissionConfig) -> Self {
         Self {
-            allowed_patterns: config.allowed_patterns.iter().filter_map(|p| Regex::new(p).ok()).collect(),
-            denied_patterns: config.denied_patterns.iter().filter_map(|p| Regex::new(p).ok()).collect(),
-            dangerous_patterns: config.dangerous_patterns.iter().filter_map(|p| Regex::new(p).ok()).collect(),
+            allowed_patterns: config
+                .allowed_patterns
+                .iter()
+                .filter_map(|p| Regex::new(p).ok())
+                .collect(),
+            denied_patterns: config
+                .denied_patterns
+                .iter()
+                .filter_map(|p| Regex::new(p).ok())
+                .collect(),
+            dangerous_patterns: config
+                .dangerous_patterns
+                .iter()
+                .filter_map(|p| Regex::new(p).ok())
+                .collect(),
             safe_tools: config.safe_tools,
-            whitelist_rules: config.whitelist_rules.iter().filter_map(|r| WhitelistRule::parse(r)).collect(),
+            whitelist_rules: config
+                .whitelist_rules
+                .iter()
+                .filter_map(|r| WhitelistRule::parse(r))
+                .collect(),
             confirmed_commands: HashMap::new(),
             confirmation_ttl: Duration::from_secs(config.confirmation_ttl_secs),
         }
@@ -330,7 +348,10 @@ impl PermissionManager {
             if let Some(cmd) = params.get("command").and_then(|v| v.as_str()) {
                 for pattern in &self.denied_patterns {
                     if pattern.is_match(cmd) {
-                        return Some(format!("Command matches blocked pattern: {}", pattern.as_str()));
+                        return Some(format!(
+                            "Command matches blocked pattern: {}",
+                            pattern.as_str()
+                        ));
                     }
                 }
             }
@@ -412,7 +433,9 @@ impl TrustAwarePermissionManager {
                     forge_config::PolicyAction::Allow => {
                         crate::permission_policy::PolicyAction::Allow
                     }
-                    forge_config::PolicyAction::Deny => crate::permission_policy::PolicyAction::Deny,
+                    forge_config::PolicyAction::Deny => {
+                        crate::permission_policy::PolicyAction::Deny
+                    }
                 },
                 operations: r
                     .operations

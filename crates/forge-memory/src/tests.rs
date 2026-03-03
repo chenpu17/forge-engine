@@ -142,8 +142,7 @@ mod tests {
             .await
             .expect("append");
 
-        let content =
-            tokio::fs::read_to_string(scope_dir.join("log.md")).await.expect("read");
+        let content = tokio::fs::read_to_string(scope_dir.join("log.md")).await.expect("read");
 
         assert!(content.contains("First entry."));
         assert!(content.contains("Second entry."));
@@ -155,14 +154,7 @@ mod tests {
         let writer = MemoryWriter::new(scope_dir.clone());
 
         writer
-            .write_file(
-                MemoryScope::User,
-                None,
-                "temp.md",
-                "Temporary.",
-                WriteMode::Replace,
-                false,
-            )
+            .write_file(MemoryScope::User, None, "temp.md", "Temporary.", WriteMode::Replace, false)
             .await
             .expect("write");
 
@@ -235,9 +227,8 @@ mod tests {
         assert!(scope_dir.join("projects/new.md").exists());
         assert!(!scope_dir.join("projects/old.md").exists());
 
-        let root_ref = tokio::fs::read_to_string(scope_dir.join("root_ref.md"))
-            .await
-            .expect("read root ref");
+        let root_ref =
+            tokio::fs::read_to_string(scope_dir.join("root_ref.md")).await.expect("read root ref");
         assert!(root_ref.contains("@projects/new.md"));
         assert!(!root_ref.contains("@projects/old.md"));
 
@@ -276,14 +267,7 @@ mod tests {
             .expect("write prefs");
 
         writer
-            .write_file(
-                MemoryScope::User,
-                None,
-                "notes.md",
-                "# Notes",
-                WriteMode::Replace,
-                false,
-            )
+            .write_file(MemoryScope::User, None, "notes.md", "# Notes", WriteMode::Replace, false)
             .await
             .expect("write notes");
 
@@ -316,8 +300,7 @@ mod tests {
             .await
             .expect("write");
 
-        let file =
-            loader.read_file(MemoryScope::User, None, "prefs.md").await.expect("read");
+        let file = loader.read_file(MemoryScope::User, None, "prefs.md").await.expect("read");
 
         assert!(file.is_some());
         let f = file.expect("file exists");
@@ -330,8 +313,7 @@ mod tests {
         let (_dir, scope_dir) = temp_scope();
         let loader = MemoryLoader::new(scope_dir);
 
-        let file =
-            loader.read_file(MemoryScope::User, None, "nope.md").await.expect("read");
+        let file = loader.read_file(MemoryScope::User, None, "nope.md").await.expect("read");
 
         assert!(file.is_none());
     }
@@ -342,11 +324,8 @@ mod tests {
         let loader = MemoryLoader::new(scope_dir.clone());
 
         let large_body = "A".repeat(9000);
-        let content =
-            format!("---\nscope: user\nupdated: 2026-02-08\n---\n\n{large_body}\n");
-        tokio::fs::write(scope_dir.join("large.md"), content)
-            .await
-            .expect("write large file");
+        let content = format!("---\nscope: user\nupdated: 2026-02-08\n---\n\n{large_body}\n");
+        tokio::fs::write(scope_dir.join("large.md"), content).await.expect("write large file");
 
         let truncated = loader
             .read_file(MemoryScope::User, None, "large.md")
@@ -369,8 +348,7 @@ mod tests {
         let (_dir, scope_dir) = temp_scope();
         let loader = MemoryLoader::new(scope_dir);
 
-        let result =
-            loader.read_file(MemoryScope::User, None, "../etc/passwd").await;
+        let result = loader.read_file(MemoryScope::User, None, "../etc/passwd").await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -397,10 +375,9 @@ Working on forge.\n";
 
         tokio::fs::write(&legacy_path, legacy_content).await.expect("write legacy");
 
-        let result =
-            MemoryMigration::migrate(&legacy_path, &memory_dir, MemoryScope::User)
-                .await
-                .expect("migrate");
+        let result = MemoryMigration::migrate(&legacy_path, &memory_dir, MemoryScope::User)
+            .await
+            .expect("migrate");
 
         assert!(result.migrated);
         assert_eq!(result.files_created, 2);
@@ -461,14 +438,7 @@ Working on forge.\n";
         let content =
             "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA...\n-----END RSA PRIVATE KEY-----";
         let result = writer
-            .write_file(
-                MemoryScope::User,
-                None,
-                "key.md",
-                content,
-                WriteMode::Replace,
-                true,
-            )
+            .write_file(MemoryScope::User, None, "key.md", content, WriteMode::Replace, true)
             .await;
 
         assert!(

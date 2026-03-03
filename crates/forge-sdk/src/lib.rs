@@ -14,18 +14,15 @@ mod types;
 
 // Primary API
 pub use builder::ForgeSDKBuilder;
-pub use sdk::ForgeSDK;
-pub use config::{
-    LlmSettings, ObservabilityConfig, ForgeConfig, SessionSettings, ToolsSettings,
-};
+pub use config::{ForgeConfig, LlmSettings, ObservabilityConfig, SessionSettings, ToolsSettings};
 pub use error::{ForgeError, Result};
 pub use event::{AgentEvent, AgentEventExt, TodoItem, TokenUsage};
+pub use sdk::ForgeSDK;
 pub use session::{SessionId, SessionSummary};
 pub use types::{
     CompressionResult, EventDispatchMode, McpConnectionTestResult, McpServerInfo,
-    McpServerManageConfig, McpServerStatus, McpStatus, McpToolInfo, McpTransportType,
-    MemoryScope, ModelSwitchResult, ProcessOptions, ProxyInfo, RequestId, SessionStatus,
-    ToolCategory, ToolInfo,
+    McpServerManageConfig, McpServerStatus, McpStatus, McpToolInfo, McpTransportType, MemoryScope,
+    ModelSwitchResult, ProcessOptions, ProxyInfo, RequestId, SessionStatus, ToolCategory, ToolInfo,
 };
 
 // Re-export useful types from dependencies

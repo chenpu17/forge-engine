@@ -80,12 +80,10 @@ impl McpToolWrapper {
                 ContentBlock::Image { data, mime_type } => {
                     format!("[Image: {mime_type} ({} bytes)]", data.len())
                 }
-                ContentBlock::Resource { resource } => {
-                    resource.text.as_ref().map_or_else(
-                        || format!("[Resource: {}]", resource.uri),
-                        Clone::clone,
-                    )
-                }
+                ContentBlock::Resource { resource } => resource
+                    .text
+                    .as_ref()
+                    .map_or_else(|| format!("[Resource: {}]", resource.uri), Clone::clone),
             })
             .collect::<Vec<_>>()
             .join("\n")
@@ -134,10 +132,10 @@ impl forge_domain::Tool for McpToolWrapper {
         }
 
         // Convert params to HashMap
-        let arguments: HashMap<String, Value> = params.as_object().map_or_else(
-            HashMap::new,
-            |obj| obj.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
-        );
+        let arguments: HashMap<String, Value> =
+            params.as_object().map_or_else(HashMap::new, |obj| {
+                obj.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+            });
 
         // Check circuit breaker before attempting the remote call
         {
@@ -154,9 +152,11 @@ impl forge_domain::Tool for McpToolWrapper {
             Err(err) => {
                 let should_retry = matches!(
                     err,
-                    McpClientError::NotConnected | McpClientError::NotInitialized |
-McpClientError::Transport(TransportError::NotConnected |
-TransportError::Timeout)
+                    McpClientError::NotConnected
+                        | McpClientError::NotInitialized
+                        | McpClientError::Transport(
+                            TransportError::NotConnected | TransportError::Timeout
+                        )
                 );
                 if should_retry {
                     tracing::warn!(
@@ -314,7 +314,9 @@ impl McpServerConfig {
                 }
             }
             McpTransportType::Sse => {
-                if self.url.is_none() || self.url.as_ref().map_or(true, std::string::String::is_empty) {
+                if self.url.is_none()
+                    || self.url.as_ref().map_or(true, std::string::String::is_empty)
+                {
                     return Err("Server URL is required for SSE transport".to_string());
                 }
                 if let Some(ref url) = self.url {
@@ -326,10 +328,10 @@ impl McpServerConfig {
                 }
             }
             McpTransportType::StreamableHttp => {
-                if self.url.is_none() || self.url.as_ref().map_or(true, std::string::String::is_empty) {
-                    return Err(
-                        "Server URL is required for Streamable HTTP transport".to_string()
-                    );
+                if self.url.is_none()
+                    || self.url.as_ref().map_or(true, std::string::String::is_empty)
+                {
+                    return Err("Server URL is required for Streamable HTTP transport".to_string());
                 }
                 if let Some(ref url) = self.url {
                     if !url.starts_with("http://") && !url.starts_with("https://") {
@@ -414,8 +416,7 @@ impl McpConfig {
             serde_json::from_str(&content)
                 .map_err(|e| format!("Failed to parse MCP config as JSON: {e}"))
         } else {
-            toml::from_str(&content)
-                .map_err(|e| format!("Failed to parse MCP config as TOML: {e}"))
+            toml::from_str(&content).map_err(|e| format!("Failed to parse MCP config as TOML: {e}"))
         }
     }
 

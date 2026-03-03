@@ -3,9 +3,9 @@
 //! This module provides utilities to extract file paths from shell commands
 //! for security checking.
 
-use std::sync::LazyLock;
 use regex::Regex;
 use std::path::PathBuf;
+use std::sync::LazyLock;
 
 /// Regex for extracting redirect targets
 #[allow(clippy::expect_used)]

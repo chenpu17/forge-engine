@@ -5,11 +5,15 @@
 //! - [`SseTransport`]: HTTP Server-Sent Events for remote MCP servers
 //! - [`StreamableHttpTransport`]: Streamable HTTP (MCP 2025-11-25 spec)
 
-use crate::types::{JsonRpcMessage, JsonRpcNotification, JsonRpcRequest, JsonRpcResponse, RequestId, JSONRPC_VERSION};
+use crate::types::{
+    JsonRpcMessage, JsonRpcNotification, JsonRpcRequest, JsonRpcResponse, RequestId,
+    JSONRPC_VERSION,
+};
 use futures::StreamExt;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
@@ -144,7 +148,25 @@ fn create_streaming_client(proxy: Option<&ProxyConfig>) -> Result<reqwest::Clien
         }
     }
 
-    builder.build().map_err(|e| format!("Failed to build HTTP client: {e}"))
+    let primary = catch_unwind(AssertUnwindSafe(|| builder.build()));
+    match primary {
+        Ok(Ok(client)) => return Ok(client),
+        Ok(Err(e)) => {
+            tracing::warn!("HTTP client build failed ({e}), retrying with no_proxy");
+        }
+        Err(_) => {
+            tracing::warn!("HTTP client build panicked, retrying with no_proxy");
+        }
+    }
+
+    let fallback = catch_unwind(AssertUnwindSafe(|| reqwest::Client::builder().no_proxy().build()));
+    match fallback {
+        Ok(Ok(client)) => Ok(client),
+        Ok(Err(e)) => Err(format!("Failed to build fallback no_proxy HTTP client: {e}")),
+        Err(_) => {
+            Err("Failed to build fallback no_proxy HTTP client: builder panicked".to_string())
+        }
+    }
 }
 
 // ============================================================================
@@ -195,23 +217,52 @@ impl StdioTransport {
     /// This allowlist prevents leaking sensitive secrets (API keys, tokens, etc.)
     const SAFE_ENV_VARS: &'static [&'static str] = &[
         // Essential for process execution
-        "PATH", "HOME", "USER", "SHELL", "TERM", "LANG", "LC_ALL", "LC_CTYPE",
+        "PATH",
+        "HOME",
+        "USER",
+        "SHELL",
+        "TERM",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
         // Windows system variables (required for Node.js crypto on Windows)
-        "SYSTEMROOT", "WINDIR", "USERPROFILE", "APPDATA", "LOCALAPPDATA",
-        "PROGRAMFILES", "PROGRAMFILES(X86)", "PROGRAMDATA", "COMSPEC",
+        "SYSTEMROOT",
+        "WINDIR",
+        "USERPROFILE",
+        "APPDATA",
+        "LOCALAPPDATA",
+        "PROGRAMFILES",
+        "PROGRAMFILES(X86)",
+        "PROGRAMDATA",
+        "COMSPEC",
         // Node.js / npm
-        "NODE_ENV", "NODE_PATH", "NPM_CONFIG_PREFIX",
+        "NODE_ENV",
+        "NODE_PATH",
+        "NPM_CONFIG_PREFIX",
         // Python
-        "PYTHONPATH", "VIRTUAL_ENV",
+        "PYTHONPATH",
+        "VIRTUAL_ENV",
         // Rust
-        "CARGO_HOME", "RUSTUP_HOME",
+        "CARGO_HOME",
+        "RUSTUP_HOME",
         // Common development
-        "EDITOR", "VISUAL", "TZ", "TMPDIR", "TEMP", "TMP",
+        "EDITOR",
+        "VISUAL",
+        "TZ",
+        "TMPDIR",
+        "TEMP",
+        "TMP",
         // XDG directories
-        "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_RUNTIME_DIR",
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME",
+        "XDG_CACHE_HOME",
+        "XDG_RUNTIME_DIR",
         // TLS/SSL certificates
-        "SSL_CERT_FILE", "SSL_CERT_DIR", "NODE_EXTRA_CA_CERTS",
-        "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE",
+        "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
+        "NODE_EXTRA_CA_CERTS",
+        "REQUESTS_CA_BUNDLE",
+        "CURL_CA_BUNDLE",
     ];
 
     /// Create a new stdio transport by spawning a subprocess.
@@ -274,7 +325,8 @@ impl StdioTransport {
         let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(1);
 
         // Spawn reader thread for stdout
-        let reader_handle = stdout.map(|stdout| std::thread::spawn(move || {
+        let reader_handle = stdout.map(|stdout| {
+            std::thread::spawn(move || {
                 let reader = BufReader::new(stdout);
                 for line in reader.lines() {
                     // Check for shutdown
@@ -291,7 +343,9 @@ impl StdioTransport {
                                         RequestId::String(s) => match s.parse() {
                                             Ok(n) => n,
                                             Err(_) => {
-                                                tracing::warn!("Non-numeric request ID in response: {s}");
+                                                tracing::warn!(
+                                                    "Non-numeric request ID in response: {s}"
+                                                );
                                                 continue;
                                             }
                                         },
@@ -318,10 +372,12 @@ impl StdioTransport {
                         }
                     }
                 }
-            }));
+            })
+        });
 
         // Spawn reader thread for stderr (prevents blocking if stderr buffer fills up)
-        let stderr_handle = stderr.map(|stderr| std::thread::spawn(move || {
+        let stderr_handle = stderr.map(|stderr| {
+            std::thread::spawn(move || {
                 let reader = BufReader::new(stderr);
                 for line in reader.lines() {
                     match line {
@@ -335,7 +391,8 @@ impl StdioTransport {
                         }
                     }
                 }
-            }));
+            })
+        });
 
         Ok(Self {
             child: Some(child),
@@ -487,7 +544,11 @@ pub struct SseTransport {
 
 impl SseTransport {
     const fn auth_header_name(&self) -> &'static str {
-        if self.auth_header.is_some() { "set" } else { "none" }
+        if self.auth_header.is_some() {
+            "set"
+        } else {
+            "none"
+        }
     }
 
     /// Extract base URL (scheme + host + port) for same-origin validation.
@@ -557,9 +618,8 @@ impl SseTransport {
     ) -> TransportResult<Self> {
         let base_url = Self::extract_base_url(url)?;
 
-        let client = create_streaming_client(proxy).map_err(|e| {
-            TransportError::HttpError(format!("Failed to create client: {e}"))
-        })?;
+        let client = create_streaming_client(proxy)
+            .map_err(|e| TransportError::HttpError(format!("Failed to create client: {e}")))?;
 
         let pending: Arc<Mutex<HashMap<i64, oneshot::Sender<JsonRpcResponse>>>> =
             Arc::new(Mutex::new(HashMap::new()));
@@ -805,23 +865,21 @@ impl SseTransport {
         };
 
         match event_type {
-            "endpoint" => {
-                match Self::validate_same_origin(base_url, event_data) {
-                    Ok(()) => {
-                        let full_url = if event_data.starts_with('/') {
-                            format!("{base_url}{event_data}")
-                        } else {
-                            event_data.to_string()
-                        };
-                        tracing::debug!("Received valid endpoint: {} -> {}", event_data, full_url);
-                        *message_endpoint.write().await = Some(full_url);
-                    }
-                    Err(e) => {
-                        tracing::error!("Rejected endpoint due to security check: {}", e);
-                        connected.store(false, Ordering::Release);
-                    }
+            "endpoint" => match Self::validate_same_origin(base_url, event_data) {
+                Ok(()) => {
+                    let full_url = if event_data.starts_with('/') {
+                        format!("{base_url}{event_data}")
+                    } else {
+                        event_data.to_string()
+                    };
+                    tracing::debug!("Received valid endpoint: {} -> {}", event_data, full_url);
+                    *message_endpoint.write().await = Some(full_url);
                 }
-            }
+                Err(e) => {
+                    tracing::error!("Rejected endpoint due to security check: {}", e);
+                    connected.store(false, Ordering::Release);
+                }
+            },
             "message" | "" => handle_message(event_data),
             "error" => {
                 tracing::error!("SSE server error: {}", event_data);
@@ -923,9 +981,10 @@ impl McpTransport for SseTransport {
             post_request = post_request.header(&auth.name, &auth.value);
         }
 
-        post_request.send().await.map_err(|e| {
-            TransportError::HttpError(format!("Failed to send notification: {e}"))
-        })?;
+        post_request
+            .send()
+            .await
+            .map_err(|e| TransportError::HttpError(format!("Failed to send notification: {e}")))?;
 
         Ok(())
     }
@@ -1014,9 +1073,8 @@ impl StreamableHttpTransport {
         auth_header: Option<AuthHeader>,
         proxy: Option<&ProxyConfig>,
     ) -> TransportResult<Self> {
-        let client = create_streaming_client(proxy).map_err(|e| {
-            TransportError::HttpError(format!("Failed to create client: {e}"))
-        })?;
+        let client = create_streaming_client(proxy)
+            .map_err(|e| TransportError::HttpError(format!("Failed to create client: {e}")))?;
 
         let transport = Self {
             client,
@@ -1102,12 +1160,8 @@ impl StreamableHttpTransport {
         };
 
         {
-            let same_session = self
-                .stream_session_id
-                .read()
-                .await
-                .as_ref()
-                .is_some_and(|s| s == &session_id);
+            let same_session =
+                self.stream_session_id.read().await.as_ref().is_some_and(|s| s == &session_id);
             if same_session {
                 let guard = self.stream_handle.lock().await;
                 if let Some(handle) = guard.as_ref() {
@@ -1279,7 +1333,9 @@ impl StreamableHttpTransport {
                     RequestId::String(s) => match s.parse() {
                         Ok(n) => n,
                         Err(_) => {
-                            tracing::warn!("Non-numeric request ID in Streamable HTTP response: {s}");
+                            tracing::warn!(
+                                "Non-numeric request ID in Streamable HTTP response: {s}"
+                            );
                             return;
                         }
                     },
@@ -1687,10 +1743,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_streamable_http_request_fails_on_unreachable() {
-        let transport =
-            StreamableHttpTransport::connect("http://127.0.0.1:1/mcp", None, None)
-                .await
-                .expect("connect should succeed");
+        let transport = StreamableHttpTransport::connect("http://127.0.0.1:1/mcp", None, None)
+            .await
+            .expect("connect should succeed");
         let req = JsonRpcRequest::new(1i64, "ping", None);
         let result = transport.request(req).await;
         assert!(result.is_err());

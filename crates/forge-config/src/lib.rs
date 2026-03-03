@@ -6,6 +6,7 @@
 //! 3. Project config (`.forge/config.toml`)
 //! 4. Environment variables (`FORGE_*`)
 
+pub mod cost;
 pub mod llm;
 pub mod loader;
 pub mod logging;
@@ -16,6 +17,7 @@ pub mod session;
 pub mod tools;
 pub mod ui;
 
+pub use cost::{CostConfig, PricingEntry};
 pub use llm::{LlmConfig, LlmMode, LlmProvider, SubAgentLlmConfig};
 pub use loader::ConfigLoader;
 pub use logging::LoggingConfig;
@@ -52,8 +54,10 @@ pub struct ForgeConfig {
     /// Logging settings.
     #[serde(default)]
     pub logging: LoggingConfig,
+    /// Cost tracking settings.
+    #[serde(default)]
+    pub cost: CostConfig,
 }
-
 
 impl ForgeConfig {
     /// Load configuration from all sources (convenience method).
@@ -86,10 +90,7 @@ impl ForgeConfig {
         }
         let valid_levels = ["trace", "debug", "info", "warn", "error"];
         if !valid_levels.contains(&self.logging.level.to_lowercase().as_str()) {
-            return Err(format!(
-                "logging.level must be one of: {}",
-                valid_levels.join(", ")
-            ));
+            return Err(format!("logging.level must be one of: {}", valid_levels.join(", ")));
         }
         Ok(())
     }

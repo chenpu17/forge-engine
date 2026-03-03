@@ -17,17 +17,8 @@ impl ProjectPromptLoader {
     /// Create a new project prompt loader.
     #[must_use]
     pub fn new() -> Self {
-        let global_path =
-            dirs::home_dir().map(|d| d.join(".forge/FORGE.md"));
-        Self {
-            global_path,
-            doc_names: vec![
-                "CLAUDE.md",
-                "FORGE.md",
-                ".claude.md",
-                ".forge.md",
-            ],
-        }
+        let global_path = dirs::home_dir().map(|d| d.join(".forge/FORGE.md"));
+        Self { global_path, doc_names: vec!["CLAUDE.md", "FORGE.md", ".claude.md", ".forge.md"] }
     }
 
     /// Load project documentation from the given directory.
@@ -86,22 +77,14 @@ impl ProjectPromptLoader {
                 return true;
             }
         }
-        self.doc_names
-            .iter()
-            .any(|name| project_dir.join(name).exists())
+        self.doc_names.iter().any(|name| project_dir.join(name).exists())
     }
 
     /// Get the path of the first found project document.
     #[must_use]
-    pub fn find_doc_path(
-        &self,
-        project_dir: impl AsRef<Path>,
-    ) -> Option<PathBuf> {
+    pub fn find_doc_path(&self, project_dir: impl AsRef<Path>) -> Option<PathBuf> {
         let project_dir = project_dir.as_ref();
-        self.doc_names
-            .iter()
-            .map(|name| project_dir.join(name))
-            .find(|path| path.exists())
+        self.doc_names.iter().map(|name| project_dir.join(name)).find(|path| path.exists())
     }
 }
 
@@ -118,13 +101,9 @@ mod tests {
     #[test]
     fn test_load_project_doc() {
         let dir = tempfile::tempdir().expect("create temp dir");
-        std::fs::write(dir.path().join("FORGE.md"), "# My Project")
-            .expect("write");
+        std::fs::write(dir.path().join("FORGE.md"), "# My Project").expect("write");
 
-        let loader = ProjectPromptLoader {
-            global_path: None,
-            doc_names: vec!["FORGE.md"],
-        };
+        let loader = ProjectPromptLoader { global_path: None, doc_names: vec!["FORGE.md"] };
         let content = loader.load(dir.path());
         assert!(content.is_some());
         assert!(content.unwrap().contains("My Project"));
@@ -133,10 +112,7 @@ mod tests {
     #[test]
     fn test_no_docs() {
         let dir = tempfile::tempdir().expect("create temp dir");
-        let loader = ProjectPromptLoader {
-            global_path: None,
-            doc_names: vec!["FORGE.md"],
-        };
+        let loader = ProjectPromptLoader { global_path: None, doc_names: vec!["FORGE.md"] };
         assert!(!loader.has_docs(dir.path()));
         assert!(loader.load(dir.path()).is_none());
     }

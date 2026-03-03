@@ -9,3 +9,6 @@ include = ["read", "write", "edit", "web_search", "web_fetch"]
 
 [subagents]
 enabled = ["research", "writer"]
+
+[templates]
+enabled = ["writing", "security"]

@@ -215,11 +215,20 @@ mod tests {
 
     #[async_trait]
     impl LlmProvider for MockProvider {
-        fn id(&self) -> &str { &self.id }
-        fn name(&self) -> &str { &self.id }
-        fn supported_models(&self) -> Vec<ModelInfo> { self.models.clone() }
+        fn id(&self) -> &str {
+            &self.id
+        }
+        fn name(&self) -> &str {
+            &self.id
+        }
+        fn supported_models(&self) -> Vec<ModelInfo> {
+            self.models.clone()
+        }
         async fn chat_stream(
-            &self, _messages: &[ChatMessage], _tools: Vec<ToolDef>, _config: &LlmConfig,
+            &self,
+            _messages: &[ChatMessage],
+            _tools: Vec<ToolDef>,
+            _config: &LlmConfig,
         ) -> Result<LlmEventStream> {
             unimplemented!("mock provider")
         }

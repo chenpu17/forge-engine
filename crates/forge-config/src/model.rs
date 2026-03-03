@@ -115,9 +115,7 @@ impl EndpointConfig {
     /// Create a new endpoint with the given base URL.
     #[must_use]
     pub fn new(base_url: impl Into<String>) -> Self {
-        Self {
-            base_url: base_url.into(),
-        }
+        Self { base_url: base_url.into() }
     }
 }
 
@@ -161,16 +159,12 @@ impl std::fmt::Debug for AuthConfig {
                 .field("api_key", &"***")
                 .finish(),
             Self::Header { headers } => {
-                let redacted: HashMap<&String, &str> =
-                    headers.keys().map(|k| (k, "***")).collect();
-                f.debug_struct("Header")
-                    .field("headers", &redacted)
-                    .finish()
+                let redacted: HashMap<&String, &str> = headers.keys().map(|k| (k, "***")).collect();
+                f.debug_struct("Header").field("headers", &redacted).finish()
             }
-            Self::Multi { credentials } => f
-                .debug_struct("Multi")
-                .field("credentials", credentials)
-                .finish(),
+            Self::Multi { credentials } => {
+                f.debug_struct("Multi").field("credentials", credentials).finish()
+            }
             Self::None => write!(f, "None"),
         }
     }
@@ -183,15 +177,10 @@ impl AuthConfig {
             Self::Bearer { token } => {
                 headers.insert("Authorization".to_string(), format!("Bearer {token}"));
             }
-            Self::ApiKey {
-                header_name,
-                api_key,
-            } => {
+            Self::ApiKey { header_name, api_key } => {
                 headers.insert(header_name.clone(), api_key.clone());
             }
-            Self::Header {
-                headers: custom_headers,
-            } => {
+            Self::Header { headers: custom_headers } => {
                 headers.extend(custom_headers.clone());
             }
             Self::Multi { credentials } => {
@@ -259,11 +248,7 @@ pub struct Capabilities {
 
 impl Default for Capabilities {
     fn default() -> Self {
-        Self {
-            streaming: true,
-            tools: true,
-            vision: false,
-        }
+        Self { streaming: true, tools: true, vision: false }
     }
 }
 
@@ -356,35 +341,22 @@ mod tests {
 
     #[test]
     fn test_auth_bearer() {
-        let auth = AuthConfig::Bearer {
-            token: "test-token".to_string(),
-        };
+        let auth = AuthConfig::Bearer { token: "test-token".to_string() };
         let mut headers = HashMap::new();
         auth.apply_headers(&mut headers);
-        assert_eq!(
-            headers.get("Authorization"),
-            Some(&"Bearer test-token".to_string())
-        );
+        assert_eq!(headers.get("Authorization"), Some(&"Bearer test-token".to_string()));
     }
 
     #[test]
     fn test_auth_is_configured() {
-        assert!(AuthConfig::Bearer {
-            token: "t".to_string()
-        }
-        .is_configured());
-        assert!(!AuthConfig::Bearer {
-            token: "  ".to_string()
-        }
-        .is_configured());
+        assert!(AuthConfig::Bearer { token: "t".to_string() }.is_configured());
+        assert!(!AuthConfig::Bearer { token: "  ".to_string() }.is_configured());
         assert!(!AuthConfig::None.is_configured());
     }
 
     #[test]
     fn test_auth_debug_redacts_secrets() {
-        let bearer = AuthConfig::Bearer {
-            token: "sk-secret-key-12345".to_string(),
-        };
+        let bearer = AuthConfig::Bearer { token: "sk-secret-key-12345".to_string() };
         let debug_str = format!("{bearer:?}");
         assert!(
             !debug_str.contains("sk-secret-key-12345"),

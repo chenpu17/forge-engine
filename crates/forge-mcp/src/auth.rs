@@ -15,6 +15,7 @@
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
 use thiserror::Error;
 use tracing::{debug, warn};
@@ -225,12 +226,35 @@ pub struct OAuth21Client {
     metadata: Option<ServerMetadata>,
 }
 
+fn build_http_client_safely() -> reqwest::Client {
+    let primary = catch_unwind(AssertUnwindSafe(|| reqwest::Client::builder().build()));
+    if let Ok(Ok(client)) = primary {
+        return client;
+    }
+    match primary {
+        Ok(Err(e)) => {
+            warn!("OAuth HTTP client build failed ({e}), retrying with no_proxy");
+        }
+        Err(_) => {
+            warn!("OAuth HTTP client build panicked, retrying with no_proxy");
+        }
+        Ok(Ok(_)) => {}
+    }
+
+    let fallback = catch_unwind(AssertUnwindSafe(|| reqwest::Client::builder().no_proxy().build()));
+    match fallback {
+        Ok(Ok(client)) => client,
+        Ok(Err(e)) => panic!("Cannot create OAuth HTTP client (no_proxy): {e}"),
+        Err(_) => panic!("Cannot create OAuth HTTP client: builder panicked even with no_proxy"),
+    }
+}
+
 impl OAuth21Client {
     /// Create a new OAuth client.
     #[must_use]
     pub fn new(server_name: impl Into<String>, config: OAuthConfig) -> Self {
         Self {
-            client: reqwest::Client::new(),
+            client: build_http_client_safely(),
             config,
             server_name: server_name.into(),
             metadata: None,
@@ -257,7 +281,9 @@ impl OAuth21Client {
 
         let result = self.fetch_metadata(&well_known_url).await;
 
-        let metadata = if let Ok(m) = result { m } else {
+        let metadata = if let Ok(m) = result {
+            m
+        } else {
             // Fallback to OpenID Connect discovery
             let oidc_url = format!("{base}/.well-known/openid-configuration");
             debug!("Falling back to OIDC discovery at {}", oidc_url);
@@ -387,15 +413,12 @@ impl OAuth21Client {
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            return Err(OAuthError::TokenExchangeFailed(format!(
-                "HTTP {status}: {body}"
-            )));
+            return Err(OAuthError::TokenExchangeFailed(format!("HTTP {status}: {body}")));
         }
 
-        let token_response: TokenResponse = response
-            .json()
-            .await
-            .map_err(|e| OAuthError::TokenExchangeFailed(format!("Failed to parse response: {e}")))?;
+        let token_response: TokenResponse = response.json().await.map_err(|e| {
+            OAuthError::TokenExchangeFailed(format!("Failed to parse response: {e}"))
+        })?;
 
         let token_data = Self::token_response_to_data(token_response);
         self.save_tokens(&token_data)?;
@@ -414,9 +437,7 @@ impl OAuth21Client {
             .as_deref()
             .or_else(|| self.metadata.as_ref().map(|m| m.token_endpoint.as_str()))
             .ok_or_else(|| {
-                OAuthError::RefreshFailed(
-                    "No token endpoint configured or discovered".to_string(),
-                )
+                OAuthError::RefreshFailed("No token endpoint configured or discovered".to_string())
             })?;
 
         let mut params = vec![
@@ -482,7 +503,9 @@ impl OAuth21Client {
     /// Returns an `OAuthError` if no tokens are available or refresh fails.
     pub async fn get_valid_token(&self) -> OAuthResult<String> {
         let tokens = self.load_tokens()?.ok_or_else(|| {
-            OAuthError::AuthorizationFailed("No tokens available. Authorization required.".to_string())
+            OAuthError::AuthorizationFailed(
+                "No tokens available. Authorization required.".to_string(),
+            )
         })?;
 
         if !tokens.is_expired() {
@@ -515,8 +538,9 @@ impl OAuth21Client {
 
         // Ensure parent directory exists
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| OAuthError::StorageError(format!("Failed to create directory: {e}")))?;
+            std::fs::create_dir_all(parent).map_err(|e| {
+                OAuthError::StorageError(format!("Failed to create directory: {e}"))
+            })?;
         }
 
         let json = serde_json::to_string_pretty(data)
@@ -533,15 +557,19 @@ impl OAuth21Client {
                 .truncate(true)
                 .mode(0o600)
                 .open(&path)
-                .map_err(|e| OAuthError::StorageError(format!("Failed to write token file: {e}")))?;
-            file.write_all(json.as_bytes())
-                .map_err(|e| OAuthError::StorageError(format!("Failed to write token file: {e}")))?;
+                .map_err(|e| {
+                    OAuthError::StorageError(format!("Failed to write token file: {e}"))
+                })?;
+            file.write_all(json.as_bytes()).map_err(|e| {
+                OAuthError::StorageError(format!("Failed to write token file: {e}"))
+            })?;
         }
 
         #[cfg(not(unix))]
         {
-            std::fs::write(&path, json)
-                .map_err(|e| OAuthError::StorageError(format!("Failed to write token file: {e}")))?;
+            std::fs::write(&path, json).map_err(|e| {
+                OAuthError::StorageError(format!("Failed to write token file: {e}"))
+            })?;
         }
 
         debug!("Saved OAuth tokens for server '{}' to {:?}", self.server_name, path);
@@ -555,8 +583,9 @@ impl OAuth21Client {
     pub fn delete_tokens(&self) -> OAuthResult<()> {
         let path = self.token_path();
         if path.exists() {
-            std::fs::remove_file(&path)
-                .map_err(|e| OAuthError::StorageError(format!("Failed to delete token file: {e}")))?;
+            std::fs::remove_file(&path).map_err(|e| {
+                OAuthError::StorageError(format!("Failed to delete token file: {e}"))
+            })?;
         }
         Ok(())
     }

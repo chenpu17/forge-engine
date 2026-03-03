@@ -3,8 +3,8 @@
 //! The main entry point for driving agent sessions from any frontend.
 
 mod confirmation;
-mod memory;
 mod mcp;
+mod memory;
 mod persona;
 mod process;
 mod proxy;
@@ -15,35 +15,36 @@ use crate::config::ForgeConfig;
 use crate::error::{ForgeError, Result};
 use crate::event::AgentEvent;
 use crate::event::AgentEventExt;
+use crate::extensions::skill::{
+    parse_slash_command, SkillRegistry, SkillRegistryBuilder, SkillSource,
+};
 use crate::session::{SessionId, SessionSummary};
 use crate::types::{
-    EventDispatchMode, McpServerInfo, McpServerStatus, McpStatus, McpToolInfo,
-    McpTransportType, MemoryScope, ModelSwitchResult, ProcessOptions, RequestId,
-    SessionStatus, ToolInfo,
+    EventDispatchMode, McpServerInfo, McpServerStatus, McpStatus, McpToolInfo, McpTransportType,
+    MemoryScope, ModelSwitchResult, ProcessOptions, RequestId, SessionStatus, ToolInfo,
 };
+use async_trait::async_trait;
 use chrono::Utc;
 use forge_agent::{
-    AgentConfig, CancellationToken, ConfirmationHandler, ConfirmationLevel,
-    CoreAgent, HistoryMessage, RealTaskExecutor, SubAgentSecurity, ToolExecutor,
+    AgentConfig, CancellationToken, ConfirmationHandler, ConfirmationLevel, CoreAgent,
+    HistoryMessage, RealTaskExecutor, SubAgentSecurity, ToolExecutor,
 };
+use forge_llm::{ChatMessage, ChatRole, LlmConfig, LlmEvent, MessageContent, ProviderRegistry};
+use forge_mcp::security::McpSecurity;
+use forge_mcp::{McpConfig, McpManager, McpTransportType as ToolsTransportType};
 use forge_prompt::PromptManager;
 use forge_prompt::SkillInfo;
-use crate::extensions::skill::{SkillRegistry, SkillRegistryBuilder, SkillSource, parse_slash_command};
-use forge_llm::{ChatMessage, ChatRole, LlmConfig, LlmEvent, MessageContent, ProviderRegistry};
 use forge_session::{
-    CompressionResult, CompressionStrategy, ContextConfig, ContextManager,
-    Message, Session, SessionConfig, SessionManager, COMPRESSION_PROMPT,
+    CompressionResult, CompressionStrategy, ContextConfig, ContextManager, Message, Session,
+    SessionConfig, SessionManager, COMPRESSION_PROMPT,
 };
 use forge_tools::builtin::task::{TaskState, TaskTool};
-use forge_mcp::{McpConfig, McpManager, McpTransportType as ToolsTransportType};
-use forge_mcp::security::McpSecurity;
 use forge_tools::{BackgroundTaskManager, Tool, ToolContext, ToolRegistry};
-use async_trait::async_trait;
 use futures::future::BoxFuture;
 use futures::Stream;
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
 use std::future::Future;
+use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -133,8 +134,7 @@ pub struct ForgeSDK {
     /// Dirty flag (session has unsaved changes).
     pub(crate) is_dirty: Arc<RwLock<bool>>,
     /// Pending tool confirmations.
-    pub(crate) pending_confirmations:
-        Arc<RwLock<HashMap<ConfirmationKey, PendingConfirmation>>>,
+    pub(crate) pending_confirmations: Arc<RwLock<HashMap<ConfirmationKey, PendingConfirmation>>>,
     /// In-flight requests for cancellation.
     pub(crate) inflight_requests:
         Arc<RwLock<HashMap<RequestKey, Arc<parking_lot::Mutex<CancellationToken>>>>>,
@@ -158,13 +158,13 @@ pub struct ForgeSDK {
     pub(crate) memory_prompt_cache: Arc<RwLock<MemoryPromptCache>>,
     /// `SubAgent` security settings.
     pub(crate) subagent_security: Arc<parking_lot::RwLock<SubAgentSecurity>>,
+    /// Shared allowed-subagent list for the task tool schema.
+    pub(crate) task_tool_allowed_subagents: Arc<parking_lot::RwLock<Option<Vec<String>>>>,
     /// Per-session persistence mutex.
-    pub(crate) session_persist_locks:
-        Arc<RwLock<HashMap<String, Arc<tokio::sync::Mutex<()>>>>>,
+    pub(crate) session_persist_locks: Arc<RwLock<HashMap<String, Arc<tokio::sync::Mutex<()>>>>>,
     /// Process-local lock for config.toml read-modify-write.
     pub(crate) config_persist_lock: Arc<tokio::sync::Mutex<()>>,
-    /// LSP manager (optional, behind `lsp` feature).
-    #[cfg(feature = "lsp")]
+    /// LSP manager for code intelligence tools.
     pub(crate) lsp_manager: Arc<forge_lsp::LspManager>,
 }
 
@@ -174,6 +174,9 @@ pub struct ForgeSDK {
 
 impl ForgeSDK {
     /// Create an SDK instance from configuration.
+    ///
+    /// **Note:** Uses a temporary tokio runtime internally.
+    /// If already in an async context, use [`new_async`](Self::new_async) instead.
     ///
     /// # Errors
     ///
@@ -187,13 +190,42 @@ impl ForgeSDK {
             .build()
     }
 
+    /// Async variant of [`new`](Self::new).
+    ///
+    /// Use this when already inside a tokio runtime to avoid nested-runtime panics.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if configuration is invalid or initialization fails.
+    pub async fn new_async(config: ForgeConfig) -> Result<Self> {
+        crate::ForgeSDKBuilder::new()
+            .working_dir(&config.working_dir)
+            .model(&config.llm.model)
+            .provider_name(&config.llm.provider)
+            .with_builtin_tools()
+            .build_async()
+            .await
+    }
+
     /// Create an SDK instance with default configuration.
+    ///
+    /// **Note:** Uses a temporary tokio runtime internally.
+    /// If already in an async context, use [`with_defaults_async`](Self::with_defaults_async) instead.
     ///
     /// # Errors
     ///
     /// Returns error if initialization fails.
     pub fn with_defaults() -> Result<Self> {
         crate::ForgeSDKBuilder::new().with_builtin_tools().build()
+    }
+
+    /// Async variant of [`with_defaults`](Self::with_defaults).
+    ///
+    /// # Errors
+    ///
+    /// Returns error if initialization fails.
+    pub async fn with_defaults_async() -> Result<Self> {
+        crate::ForgeSDKBuilder::new().with_builtin_tools().build_async().await
     }
 
     /// Build an SDK instance from builder parts.
@@ -212,6 +244,65 @@ impl ForgeSDK {
         use_builtin_tools: bool,
         memory_dir: PathBuf,
     ) -> Result<Self> {
+        let sdk = Self::create_sdk_core(config, provider, session_manager, memory_dir)?;
+
+        // Register tools synchronously via a temporary runtime.
+        // NOTE: This will panic if called from within an existing tokio runtime.
+        // Use `from_builder_async` instead when already in an async context.
+        if use_builtin_tools || !custom_tools.is_empty() {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| ForgeError::StorageError(format!("Runtime creation failed: {e}")))?;
+
+            rt.block_on(async {
+                if use_builtin_tools {
+                    sdk.register_builtin_tools().await;
+                }
+                for tool in custom_tools {
+                    sdk.register_tool(tool).await;
+                }
+            });
+        }
+
+        Ok(sdk)
+    }
+
+    /// Async variant of [`from_builder`](Self::from_builder).
+    ///
+    /// Use this when already inside a tokio runtime to avoid nested-runtime panics.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if config validation, session manager creation,
+    /// or prompt manager initialization fails.
+    pub(crate) async fn from_builder_async(
+        config: ForgeConfig,
+        provider: Option<Arc<dyn forge_llm::LlmProvider>>,
+        session_manager: Option<Arc<dyn SessionManager>>,
+        custom_tools: Vec<Arc<dyn Tool>>,
+        use_builtin_tools: bool,
+        memory_dir: PathBuf,
+    ) -> Result<Self> {
+        let sdk = Self::create_sdk_core(config, provider, session_manager, memory_dir)?;
+
+        if use_builtin_tools {
+            sdk.register_builtin_tools().await;
+        }
+        for tool in custom_tools {
+            sdk.register_tool(tool).await;
+        }
+
+        Ok(sdk)
+    }
+
+    /// Shared SDK construction logic (no tool registration).
+    fn create_sdk_core(
+        config: ForgeConfig,
+        provider: Option<Arc<dyn forge_llm::LlmProvider>>,
+        session_manager: Option<Arc<dyn SessionManager>>,
+        memory_dir: PathBuf,
+    ) -> Result<Self> {
         config.validate()?;
 
         // Provider registry
@@ -227,11 +318,9 @@ impl ForgeSDK {
             sm
         } else {
             Arc::new(
-                forge_session::FileSessionManager::new(
-                    forge_infra::data_dir().join("sessions"),
-                )
-                .map_err(|e| ForgeError::StorageError(e.to_string()))?
-                .with_persistence_format(config.session.persistence_format),
+                forge_session::FileSessionManager::new(forge_infra::data_dir().join("sessions"))
+                    .map_err(|e| ForgeError::StorageError(e.to_string()))?
+                    .with_persistence_format(config.session.persistence_format),
             )
         };
 
@@ -239,9 +328,8 @@ impl ForgeSDK {
         let prompt_manager = Self::init_prompt_manager(&config)?;
 
         // Sub-agent security
-        let subagent_security = Arc::new(parking_lot::RwLock::new(
-            Self::build_subagent_security(&config, &prompt_manager),
-        ));
+        let initial_security = Self::build_subagent_security(&config, &prompt_manager);
+        let subagent_security = Arc::new(parking_lot::RwLock::new(initial_security.clone()));
 
         // Skill registry
         let skill_registry = Self::init_skill_registry(&config, &prompt_manager)?;
@@ -250,7 +338,6 @@ impl ForgeSDK {
         let tool_registry = ToolRegistry::new();
 
         // LSP manager
-        #[cfg(feature = "lsp")]
         let lsp_manager = Arc::new(forge_lsp::LspManager::new(config.working_dir.clone()));
 
         let sdk = Self {
@@ -274,30 +361,13 @@ impl ForgeSDK {
             env_cache: Arc::new(RwLock::new(EnvCache::default())),
             memory_prompt_cache: Arc::new(RwLock::new(MemoryPromptCache::default())),
             subagent_security,
+            task_tool_allowed_subagents: Arc::new(parking_lot::RwLock::new(
+                initial_security.enabled_subagents.clone(),
+            )),
             session_persist_locks: Arc::new(RwLock::new(HashMap::new())),
             config_persist_lock: Arc::new(tokio::sync::Mutex::new(())),
-            #[cfg(feature = "lsp")]
             lsp_manager,
         };
-
-        // Register tools if requested
-        if use_builtin_tools || !custom_tools.is_empty() {
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .map_err(|e| {
-                    ForgeError::StorageError(format!("Runtime creation failed: {e}"))
-                })?;
-
-            rt.block_on(async {
-                if use_builtin_tools {
-                    sdk.register_builtin_tools().await;
-                }
-                for tool in custom_tools {
-                    sdk.register_tool(tool).await;
-                }
-            });
-        }
 
         Ok(sdk)
     }
@@ -318,36 +388,32 @@ impl ForgeSDK {
             .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok())
             .or_else(|| std::env::var("OPENAI_API_KEY").ok());
 
-        let base_url = config
-            .llm
-            .base_url
-            .clone()
-            .or_else(|| std::env::var("FORGE_LLM_BASE_URL").ok());
+        let base_url =
+            config.llm.base_url.clone().or_else(|| std::env::var("FORGE_LLM_BASE_URL").ok());
 
         if let Some(key) = api_key {
-            let provider: Arc<dyn forge_llm::LlmProvider> =
-                match config.llm.provider.as_str() {
-                    "openai" => {
-                        let mut p = forge_llm::OpenAIProvider::new(&key);
-                        if let Some(url) = &base_url {
-                            p = p.with_base_url(url);
-                        }
-                        Arc::new(p)
+            let provider: Arc<dyn forge_llm::LlmProvider> = match config.llm.provider.as_str() {
+                "openai" => {
+                    let mut p = forge_llm::OpenAIProvider::new(&key);
+                    if let Some(url) = &base_url {
+                        p = p.with_base_url(url);
                     }
-                    "gemini" => Arc::new(forge_llm::GeminiProvider::new(&key)),
-                    "ollama" => {
-                        let url = base_url.as_deref().unwrap_or("http://localhost:11434");
-                        Arc::new(forge_llm::OllamaProvider::with_base_url(url))
+                    Arc::new(p)
+                }
+                "gemini" => Arc::new(forge_llm::GeminiProvider::new(&key)),
+                "ollama" => {
+                    let url = base_url.as_deref().unwrap_or("http://localhost:11434");
+                    Arc::new(forge_llm::OllamaProvider::with_base_url(url))
+                }
+                // Default to Anthropic
+                _ => {
+                    let mut p = forge_llm::AnthropicProvider::new(&key);
+                    if let Some(url) = &base_url {
+                        p = p.with_base_url(url);
                     }
-                    // Default to Anthropic
-                    _ => {
-                        let mut p = forge_llm::AnthropicProvider::new(&key);
-                        if let Some(url) = &base_url {
-                            p = p.with_base_url(url);
-                        }
-                        Arc::new(p)
-                    }
-                };
+                    Arc::new(p)
+                }
+            };
             registry.register(provider);
         }
     }
@@ -375,13 +441,14 @@ impl ForgeSDK {
         let persona = prompt_manager.get_current_persona();
         let mut disabled_tools = config.tools.disabled.clone();
         let bash_readonly = persona.is_some_and(|p| p.options.bash_readonly);
+        let enabled_subagents = persona.and_then(|p| p.enabled_subagents.clone());
         if let Some(persona) = persona {
             disabled_tools.extend(persona.disabled_tools.clone());
         }
         disabled_tools.sort();
         disabled_tools.dedup();
 
-        SubAgentSecurity { bash_readonly, disabled_tools }
+        SubAgentSecurity { bash_readonly, disabled_tools, enabled_subagents }
     }
 
     /// Initialize skill registry from config + loaded prompts directory.
@@ -412,7 +479,10 @@ impl ForgeSDK {
         let security = Self::build_subagent_security(&config, &pm);
         drop(pm);
         drop(config);
-        *self.subagent_security.write() = security;
+        // Update enforcement first, then schema (avoid window where schema
+        // shows new restrictions but runtime still uses old ones)
+        *self.subagent_security.write() = security.clone();
+        *self.task_tool_allowed_subagents.write() = security.enabled_subagents;
     }
 
     pub(super) fn resolve_context_limit_for_model(&self, model: &str) -> usize {
@@ -430,9 +500,7 @@ impl ForgeSDK {
         ContextManager::new(context_config).with_strategy(CompressionStrategy::Summarize)
     }
 
-    pub(super) fn read_toml_doc_or_empty(
-        path: &std::path::Path,
-    ) -> Result<toml_edit::DocumentMut> {
+    pub(super) fn read_toml_doc_or_empty(path: &std::path::Path) -> Result<toml_edit::DocumentMut> {
         if !path.exists() {
             return Ok(toml_edit::DocumentMut::new());
         }
@@ -481,19 +549,13 @@ impl ForgeSDK {
 
         if let Some(parent) = config_path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| {
-                ForgeError::StorageError(format!(
-                    "Failed to create config directory for lock: {e}"
-                ))
+                ForgeError::StorageError(format!("Failed to create config directory for lock: {e}"))
             })?;
         }
 
         let lock_path = config_path.with_extension("lock");
         for _ in 0..MAX_ATTEMPTS {
-            match std::fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&lock_path)
-            {
+            match std::fs::OpenOptions::new().write(true).create_new(true).open(&lock_path) {
                 Ok(mut lock_file) => {
                     let _ = std::io::Write::write_all(
                         &mut lock_file,
@@ -504,9 +566,7 @@ impl ForgeSDK {
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
                     if let Ok(metadata) = std::fs::metadata(&lock_path) {
                         if let Ok(modified) = metadata.modified() {
-                            if modified
-                                .elapsed()
-                                .unwrap_or_else(|_| Duration::from_secs(0))
+                            if modified.elapsed().unwrap_or_else(|_| Duration::from_secs(0))
                                 >= Duration::from_secs(STALE_LOCK_SECS)
                             {
                                 let _ = std::fs::remove_file(&lock_path);
@@ -535,25 +595,19 @@ impl ForgeSDK {
     /// Register all built-in tools.
     async fn register_builtin_tools(&self) {
         use forge_tools::builtin::{
-            ask_user::AskUserQuestionTool,
-            edit::EditTool,
-            glob::GlobTool,
-            grep::GrepTool,
-            read::ReadTool,
-            shell::get_shell_tools,
-            todo::TodoWriteTool,
-            web_fetch::WebFetchTool,
-            web_search::WebSearchTool,
-            write::WriteTool,
-            EnterPlanModeTool, ExitPlanModeTool, KillShellTool,
-            MemoryManageTool, MemoryReadTool, MemoryWriteTool,
-            SkillTool, TaskOutputTool,
+            ask_user::AskUserQuestionTool, edit::EditTool, glob::GlobTool, grep::GrepTool,
+            read::ReadTool, shell::get_shell_tools, todo::TodoWriteTool, web_fetch::WebFetchTool,
+            web_search::WebSearchTool, write::WriteTool, EnterPlanModeTool, ExitPlanModeTool,
+            KillShellTool, MemoryManageTool, MemoryReadTool, MemoryWriteTool, SkillTool,
+            TaskOutputTool,
         };
         use forge_tools_coding::symbols::SymbolsTool;
 
         let config = self.config.read().await;
         let working_dir = config.working_dir.clone();
         let trust_project = config.trust_project_skills;
+        let proxy_config = config.tools.proxy.clone();
+        let search_provider = config.tools.search_provider.clone();
         drop(config);
 
         let user_memory_dir = self.memory_dir.join("memory");
@@ -571,9 +625,13 @@ impl ForgeSDK {
             self.register_tool(tool).await;
         }
 
-        // Web tools
-        self.register_tool(Arc::new(WebFetchTool::new())).await;
-        self.register_tool(Arc::new(WebSearchTool::from_env())).await;
+        // Web tools (with proxy config from tools.proxy)
+        self.register_tool(Arc::new(WebFetchTool::with_proxy(&proxy_config))).await;
+        self.register_tool(Arc::new(WebSearchTool::from_settings(
+            search_provider.as_deref(),
+            Some(&proxy_config),
+        )))
+        .await;
 
         // Background task tools
         self.register_tool(Arc::new(TaskOutputTool::new())).await;
@@ -719,8 +777,11 @@ impl PersistState {
                 }
                 for id in &self.tool_call_order {
                     if let Some(call) = self.tool_calls.get(id) {
-                        let name =
-                            if call.name.is_empty() { "unknown".to_string() } else { call.name.clone() };
+                        let name = if call.name.is_empty() {
+                            "unknown".to_string()
+                        } else {
+                            call.name.clone()
+                        };
                         blocks.push(forge_session::ContentBlock::ToolUse {
                             id: id.clone(),
                             name,
@@ -763,7 +824,9 @@ impl PersistState {
 
 fn cleanup_request_state(
     request_key: &RequestKey,
-    inflight_requests: &Arc<RwLock<HashMap<RequestKey, Arc<parking_lot::Mutex<CancellationToken>>>>>,
+    inflight_requests: &Arc<
+        RwLock<HashMap<RequestKey, Arc<parking_lot::Mutex<CancellationToken>>>>,
+    >,
     pending_confirmations: &Arc<RwLock<HashMap<ConfirmationKey, PendingConfirmation>>>,
 ) {
     let inflight_cleaned = if let Ok(mut guard) = inflight_requests.try_write() {
@@ -1063,18 +1126,30 @@ impl Stream for SessionPersistStream {
                     if let Some(message) = persist_error {
                         self.queued_event = None;
                         self.end_after_persist = false;
-                        cleanup_request_state(&self.request_key, &self.inflight_requests, &self.pending_confirmations);
+                        cleanup_request_state(
+                            &self.request_key,
+                            &self.inflight_requests,
+                            &self.pending_confirmations,
+                        );
                         return Poll::Ready(Some(AgentEvent::Error { message }));
                     }
                     if let Some(event) = self.queued_event.take() {
                         if event.is_terminal() {
-                            cleanup_request_state(&self.request_key, &self.inflight_requests, &self.pending_confirmations);
+                            cleanup_request_state(
+                                &self.request_key,
+                                &self.inflight_requests,
+                                &self.pending_confirmations,
+                            );
                         }
                         return Poll::Ready(Some(event));
                     }
                     if self.end_after_persist {
                         self.end_after_persist = false;
-                        cleanup_request_state(&self.request_key, &self.inflight_requests, &self.pending_confirmations);
+                        cleanup_request_state(
+                            &self.request_key,
+                            &self.inflight_requests,
+                            &self.pending_confirmations,
+                        );
                         return Poll::Ready(Some(AgentEvent::Done { summary: None }));
                     }
                 }
@@ -1114,7 +1189,11 @@ impl Stream for SessionPersistStream {
                     cx.waker().wake_by_ref();
                     return Poll::Pending;
                 }
-                cleanup_request_state(&self.request_key, &self.inflight_requests, &self.pending_confirmations);
+                cleanup_request_state(
+                    &self.request_key,
+                    &self.inflight_requests,
+                    &self.pending_confirmations,
+                );
                 Poll::Ready(None)
             }
             Poll::Pending => Poll::Pending,
@@ -1124,7 +1203,11 @@ impl Stream for SessionPersistStream {
 
 impl Drop for SessionPersistStream {
     fn drop(&mut self) {
-        cleanup_request_state(&self.request_key, &self.inflight_requests, &self.pending_confirmations);
+        cleanup_request_state(
+            &self.request_key,
+            &self.inflight_requests,
+            &self.pending_confirmations,
+        );
     }
 }
 
@@ -1143,7 +1226,11 @@ impl CleanupStream {
             return;
         }
         self.cleaned = true;
-        cleanup_request_state(&self.request_key, &self.inflight_requests, &self.pending_confirmations);
+        cleanup_request_state(
+            &self.request_key,
+            &self.inflight_requests,
+            &self.pending_confirmations,
+        );
     }
 }
 
@@ -1229,8 +1316,7 @@ impl Stream for BatchedTextDeltaStream {
             Poll::Ready(Some(event)) => match event {
                 AgentEvent::TextDelta { delta } => {
                     if self.buffer.is_empty() {
-                        self.flush_timer =
-                            Some(Box::pin(tokio::time::sleep(self.max_latency)));
+                        self.flush_timer = Some(Box::pin(tokio::time::sleep(self.max_latency)));
                     }
                     self.buffer.push_str(&delta);
                     if self.buffer.len() >= self.max_bytes {

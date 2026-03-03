@@ -49,10 +49,7 @@ pub fn init_logging(config: &LoggingConfig) -> Result<()> {
             if let Some(parent) = log_path.parent() {
                 std::fs::create_dir_all(parent)?;
             }
-            let file = OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(log_path)?;
+            let file = OpenOptions::new().create(true).append(true).open(log_path)?;
 
             if config.json {
                 init_with_layer!(
@@ -78,10 +75,7 @@ pub fn init_logging(config: &LoggingConfig) -> Result<()> {
         // No file, no console — register filter only so spans/events are silently discarded.
         // This is intentional: the caller explicitly opted out of all output.
         (None, false) => {
-            tracing_subscriber::registry()
-                .with(filter)
-                .try_init()
-                .map_err(init_err)?;
+            tracing_subscriber::registry().with(filter).try_init().map_err(init_err)?;
         }
     }
 
@@ -93,11 +87,6 @@ pub fn init_logging(config: &LoggingConfig) -> Result<()> {
 /// # Errors
 /// Returns error if logging initialization fails.
 pub fn init_logging_simple(level: &str) -> Result<()> {
-    let config = LoggingConfig {
-        level: level.to_string(),
-        file: None,
-        console: true,
-        json: false,
-    };
+    let config = LoggingConfig { level: level.to_string(), file: None, console: true, json: false };
     init_logging(&config)
 }

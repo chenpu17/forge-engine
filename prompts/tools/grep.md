@@ -18,7 +18,7 @@ Powerful content search tool built on ripgrep for searching text patterns in fil
 | file_type | string | No | File type filter (e.g., "rs", "ts", "py") |
 | glob | string | No | Glob pattern to filter files |
 | context | integer | No | Lines of context around matches (default: 2) |
-| case_sensitive | boolean | No | Case sensitive search (default: true) |
+| case_insensitive | boolean | No | Case insensitive search (default: false) |
 
 ## Regex Syntax
 

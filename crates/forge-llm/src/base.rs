@@ -2,6 +2,29 @@
 //!
 //! Provides common functionality shared across different LLM provider implementations,
 //! reducing code duplication and ensuring consistent behavior.
+use std::panic::{catch_unwind, AssertUnwindSafe};
+
+fn safe_build_client<F>(builder: reqwest::ClientBuilder, rebuild: F) -> reqwest::Client
+where
+    F: FnOnce() -> reqwest::ClientBuilder,
+{
+    let primary = catch_unwind(AssertUnwindSafe(|| builder.build()));
+    if let Ok(Ok(client)) = primary {
+        return client;
+    }
+    match primary {
+        Ok(Err(e)) => tracing::warn!("Failed to build HTTP client ({e}), retrying with no_proxy"),
+        Err(_) => tracing::warn!("HTTP client build panicked, retrying with no_proxy"),
+        Ok(Ok(_)) => {}
+    }
+
+    let fallback = catch_unwind(AssertUnwindSafe(|| rebuild().no_proxy().build()));
+    match fallback {
+        Ok(Ok(client)) => client,
+        Ok(Err(e)) => panic!("Cannot create fallback HTTP client (no_proxy): {e}"),
+        Err(_) => panic!("Cannot create fallback HTTP client: no_proxy build panicked"),
+    }
+}
 
 /// Create an HTTP client with standard configuration (direct, no proxy)
 ///
@@ -64,9 +87,16 @@ pub fn create_http_client_with_proxy(
         builder = builder.danger_accept_invalid_certs(true);
     }
 
-    builder.build().unwrap_or_else(|e| {
-        tracing::warn!(error = %e, "Failed to build HTTP client, falling back to default");
-        reqwest::Client::new()
+    let tls_insecure = proxy_config.effective_danger_accept_invalid_certs();
+    safe_build_client(builder, move || {
+        let mut fallback = reqwest::Client::builder();
+        if use_http1_only {
+            fallback = fallback.http1_only();
+        }
+        if tls_insecure {
+            fallback = fallback.danger_accept_invalid_certs(true);
+        }
+        fallback
     })
 }
 

@@ -61,18 +61,12 @@ impl ConfigLoader {
         // 3. Environment variables (highest priority)
         // Use "__" separator for nested structure: FORGE__LLM__BASE_URL -> llm.base_url
         builder = builder.add_source(
-            config::Environment::with_prefix("FORGE")
-                .separator("__")
-                .try_parsing(true),
+            config::Environment::with_prefix("FORGE").separator("__").try_parsing(true),
         );
 
-        let settings = builder
-            .build()
-            .map_err(|e| ConfigError::Load(e.to_string()))?;
+        let settings = builder.build().map_err(|e| ConfigError::Load(e.to_string()))?;
 
-        settings
-            .try_deserialize()
-            .map_err(|e| ConfigError::Load(e.to_string()))
+        settings.try_deserialize().map_err(|e| ConfigError::Load(e.to_string()))
     }
 
     /// Load configuration from a specific file.

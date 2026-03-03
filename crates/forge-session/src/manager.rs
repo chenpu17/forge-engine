@@ -100,9 +100,9 @@ impl FileSessionManager {
 
         // Flush data to disk before rename to prevent data loss on crash
         {
-            let f = tokio::fs::File::open(&tmp_path)
-                .await
-                .map_err(|e| SessionError::PersistenceError(format!("Failed to open for sync: {e}")))?;
+            let f = tokio::fs::File::open(&tmp_path).await.map_err(|e| {
+                SessionError::PersistenceError(format!("Failed to open for sync: {e}"))
+            })?;
             f.sync_data()
                 .await
                 .map_err(|e| SessionError::PersistenceError(format!("Failed to sync: {e}")))?;

@@ -158,16 +158,22 @@ impl Tool for BatchTool {
             for call in calls {
                 if let Some(tool_name) = call.get("tool").and_then(|v| v.as_str()) {
                     if let Some(tool) = registry.get(tool_name) {
-                        let tool_params = call.get("parameters").cloned().unwrap_or_else(|| json!({}));
+                        let tool_params =
+                            call.get("parameters").cloned().unwrap_or_else(|| json!({}));
                         let level = tool.confirmation_level(&tool_params);
 
                         // Track the highest confirmation level
                         #[allow(clippy::match_same_arms)]
                         {
                             max_level = match (&max_level, &level) {
-                                (_, ConfirmationLevel::Dangerous) | (ConfirmationLevel::Dangerous, _) => ConfirmationLevel::Dangerous,
-                                (_, ConfirmationLevel::Always) | (ConfirmationLevel::Always, _) => ConfirmationLevel::Always,
-                                (_, ConfirmationLevel::Once) | (ConfirmationLevel::Once, _) => ConfirmationLevel::Once,
+                                (_, ConfirmationLevel::Dangerous)
+                                | (ConfirmationLevel::Dangerous, _) => ConfirmationLevel::Dangerous,
+                                (_, ConfirmationLevel::Always) | (ConfirmationLevel::Always, _) => {
+                                    ConfirmationLevel::Always
+                                }
+                                (_, ConfirmationLevel::Once) | (ConfirmationLevel::Once, _) => {
+                                    ConfirmationLevel::Once
+                                }
                                 _ => ConfirmationLevel::None,
                             };
                         }
@@ -353,6 +359,7 @@ impl Tool for BatchTool {
             content: output_content,
             is_error: failed > 0 && successful == 0,
             data: Some(data),
+            schema_version: None,
         })
     }
 }
@@ -745,10 +752,8 @@ mod tests {
         let batch = BatchTool::new();
         let mut registry = ToolRegistry::new();
         for i in 0..15 {
-            registry.register(Arc::new(MockTool::new(
-                &format!("mock_{i}"),
-                &format!("output_{i}"),
-            )));
+            registry
+                .register(Arc::new(MockTool::new(&format!("mock_{i}"), &format!("output_{i}"))));
         }
         batch.set_registry(Arc::new(registry));
 

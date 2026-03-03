@@ -24,7 +24,7 @@ impl MemoryLoader {
     /// Create a new `MemoryLoader`.
     ///
     /// `user_dir` should be `~/.forge/memory/`.
-    #[must_use] 
+    #[must_use]
     pub const fn new(user_dir: PathBuf) -> Self {
         Self { user_dir }
     }
@@ -334,8 +334,7 @@ impl MemoryLoader {
                     if prefix.is_empty() { name.clone() } else { format!("{prefix}/{name}") };
 
                 if safe_entry.is_file() {
-                    let content =
-                        tokio::fs::read_to_string(&safe_entry).await.unwrap_or_default();
+                    let content = tokio::fs::read_to_string(&safe_entry).await.unwrap_or_default();
                     let summary = IndexManager::extract_summary(&content, &name);
                     results.push((rel_path, summary));
                 } else if safe_entry.is_dir() {

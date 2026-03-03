@@ -499,6 +499,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "dashmap",
+ "dirs",
  "forge-config",
  "forge-domain",
  "forge-infra",
@@ -510,6 +511,7 @@ dependencies = [
  "parking_lot",
  "serde",
  "serde_json",
+ "sha2",
  "tempfile",
  "thiserror",
  "tokio",
@@ -526,6 +528,7 @@ version = "0.1.0"
 dependencies = [
  "config",
  "dirs",
+ "forge-domain",
  "serde",
  "serde_json",
  "tempfile",
@@ -538,6 +541,7 @@ name = "forge-domain"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "chrono",
  "serde",
  "serde_json",
  "thiserror",
@@ -715,6 +719,7 @@ dependencies = [
  "forge-domain",
  "forge-infra",
  "forge-llm",
+ "forge-lsp",
  "forge-mcp",
  "forge-memory",
  "forge-prompt",
@@ -773,6 +778,7 @@ dependencies = [
  "libc",
  "nix",
  "once_cell",
+ "parking_lot",
  "regex",
  "reqwest",
  "serde",

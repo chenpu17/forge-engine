@@ -17,7 +17,7 @@ When using bash for git operations:
 
 ### Commit Message Format
 
-Use conventional commit format:
+Prefer conventional commit format unless the project uses a different convention:
 ```
 type(scope): description
 

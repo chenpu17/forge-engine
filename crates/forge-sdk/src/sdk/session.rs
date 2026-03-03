@@ -101,12 +101,7 @@ impl ForgeSDK {
     /// Returns error if save fails.
     pub async fn close_session(&self) -> Result<()> {
         self.save_session().await?;
-        let closed_session_id = self
-            .active_session
-            .read()
-            .await
-            .as_ref()
-            .map(|s| s.id.to_string());
+        let closed_session_id = self.active_session.read().await.as_ref().map(|s| s.id.to_string());
         *self.active_session.write().await = None;
 
         if let Some(session_id) = closed_session_id {
@@ -127,13 +122,7 @@ impl ForgeSDK {
         self.cancel_and_remove_session_requests(&id).await;
         self.session_manager.delete(session_id).await?;
 
-        if self
-            .active_session
-            .read()
-            .await
-            .as_ref()
-            .is_some_and(|s| s.id.to_string() == id)
-        {
+        if self.active_session.read().await.as_ref().is_some_and(|s| s.id.to_string() == id) {
             *self.active_session.write().await = None;
         }
         self.session_persist_locks.write().await.remove(&id);
@@ -178,9 +167,9 @@ impl ForgeSDK {
         if self.provider_registry.get_for_model(&new_model).is_none() {
             let mut config = self.config.write().await;
             config.llm.model = previous_model.clone();
-            return Err(ForgeError::Llm(forge_llm::LlmError::ProviderUnavailable(
-                format!("No provider found for model: {new_model}"),
-            )));
+            return Err(ForgeError::Llm(forge_llm::LlmError::ProviderUnavailable(format!(
+                "No provider found for model: {new_model}"
+            ))));
         }
 
         let session_snapshot = {
@@ -221,10 +210,7 @@ impl ForgeSDK {
     /// # Errors
     ///
     /// Returns error if no active session or compression fails.
-    pub async fn compact_context(
-        &self,
-        instructions: Option<&str>,
-    ) -> Result<CompressionResult> {
+    pub async fn compact_context(&self, instructions: Option<&str>) -> Result<CompressionResult> {
         let mut session_guard = self.active_session.write().await;
         let session = session_guard.as_mut().ok_or(ForgeError::NoActiveSession)?;
 
@@ -263,12 +249,8 @@ impl ForgeSDK {
             }
             Err(e) => {
                 tracing::warn!("LLM compression failed: {e}, using fallback");
-                let (compressed, fallback_result) =
-                    context_manager.compress(&session.messages);
-                (
-                    compressed,
-                    fallback_result.summary.map(|s| format!("[Fallback] {s}")),
-                )
+                let (compressed, fallback_result) = context_manager.compress(&session.messages);
+                (compressed, fallback_result.summary.map(|s| format!("[Fallback] {s}")))
             }
         };
 
@@ -315,14 +297,11 @@ impl ForgeSDK {
         let thinking_adaptor = config.llm.thinking_adaptor;
         drop(config);
 
-        let provider = self
-            .provider_registry
-            .get_for_model(&effective_model)
-            .ok_or_else(|| {
-                ForgeError::Llm(forge_llm::LlmError::ProviderUnavailable(
-                    "No provider for compression".to_string(),
-                ))
-            })?;
+        let provider = self.provider_registry.get_for_model(&effective_model).ok_or_else(|| {
+            ForgeError::Llm(forge_llm::LlmError::ProviderUnavailable(
+                "No provider for compression".to_string(),
+            ))
+        })?;
 
         let conversation_text = messages
             .iter()
@@ -409,15 +388,11 @@ impl ForgeSDK {
                     forge_session::ContentBlock::Text { text } => text.clone(),
                     forge_session::ContentBlock::ToolUse { name, input, .. } => {
                         let input_str = input.to_string();
-                        let truncated =
-                            Self::truncate_utf8_safe(&input_str, MAX_TOOL_CONTENT_LEN);
+                        let truncated = Self::truncate_utf8_safe(&input_str, MAX_TOOL_CONTENT_LEN);
                         format!("[Tool: {name}] {truncated}")
                     }
-                    forge_session::ContentBlock::ToolResult {
-                        content, is_error, ..
-                    } => {
-                        let truncated =
-                            Self::truncate_utf8_safe(content, MAX_TOOL_CONTENT_LEN);
+                    forge_session::ContentBlock::ToolResult { content, is_error, .. } => {
+                        let truncated = Self::truncate_utf8_safe(content, MAX_TOOL_CONTENT_LEN);
                         if *is_error {
                             format!("[Tool Error] {truncated}")
                         } else {

@@ -77,9 +77,7 @@ impl ForgeConfig {
         if self.tools.max_output_size == 0 {
             errors.push("tools.max_output_size must be > 0".to_string());
         }
-        if self.observability.enabled
-            && !(0.0..=1.0).contains(&self.observability.sample_rate)
-        {
+        if self.observability.enabled && !(0.0..=1.0).contains(&self.observability.sample_rate) {
             errors.push(format!(
                 "observability.sample_rate must be between 0.0 and 1.0, got {}",
                 self.observability.sample_rate
@@ -237,9 +235,7 @@ pub struct SessionSettings {
 
 impl Default for SessionSettings {
     fn default() -> Self {
-        Self {
-            persistence_format: forge_session::SessionPersistenceFormat::PrettyJson,
-        }
+        Self { persistence_format: forge_session::SessionPersistenceFormat::PrettyJson }
     }
 }
 
@@ -267,11 +263,7 @@ const fn one_f64() -> f64 {
 
 impl Default for ObservabilityConfig {
     fn default() -> Self {
-        Self {
-            enabled: false,
-            otlp_endpoint: default_otlp_endpoint(),
-            sample_rate: 1.0,
-        }
+        Self { enabled: false, otlp_endpoint: default_otlp_endpoint(), sample_rate: 1.0 }
     }
 }
 
@@ -364,7 +356,9 @@ mod tests {
     fn test_llm_effective_temperature_default() {
         // Skip if FORGE_LLM_TEMPERATURE is set — it overrides the default.
         if std::env::var("FORGE_LLM_TEMPERATURE").is_ok() {
-            eprintln!("SKIPPED: test_llm_effective_temperature_default (FORGE_LLM_TEMPERATURE is set)");
+            eprintln!(
+                "SKIPPED: test_llm_effective_temperature_default (FORGE_LLM_TEMPERATURE is set)"
+            );
             return;
         }
         let settings = LlmSettings::default();

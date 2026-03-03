@@ -43,11 +43,7 @@ impl ForgeSDK {
 
     /// Check if there are pending confirmations for a specific session.
     pub async fn has_pending_confirmations_in_session(&self, session_id: &str) -> bool {
-        self.pending_confirmations
-            .read()
-            .await
-            .keys()
-            .any(|k| k.session_id == session_id)
+        self.pending_confirmations.read().await.keys().any(|k| k.session_id == session_id)
     }
 
     /// Respond to a confirmation routed by session id.
@@ -70,9 +66,7 @@ impl ForgeSDK {
             .collect();
 
         if matches.is_empty() {
-            return Err(ForgeError::InvalidConfirmation(format!(
-                "{session_id}:{confirmation_id}"
-            )));
+            return Err(ForgeError::InvalidConfirmation(format!("{session_id}:{confirmation_id}")));
         }
         if matches.len() > 1 {
             return Err(ForgeError::InvalidConfirmation(format!(
@@ -86,9 +80,7 @@ impl ForgeSDK {
             let _ = confirmation.response_tx.send(allowed);
             Ok(())
         } else {
-            Err(ForgeError::InvalidConfirmation(format!(
-                "{session_id}:{confirmation_id}"
-            )))
+            Err(ForgeError::InvalidConfirmation(format!("{session_id}:{confirmation_id}")))
         }
     }
 
@@ -131,11 +123,8 @@ impl ForgeSDK {
     /// Cancel all pending confirmations for a specific session.
     pub async fn cancel_all_confirmations_in_session(&self, session_id: &str) {
         let mut pending = self.pending_confirmations.write().await;
-        let keys: Vec<ConfirmationKey> = pending
-            .keys()
-            .filter(|k| k.session_id == session_id)
-            .cloned()
-            .collect();
+        let keys: Vec<ConfirmationKey> =
+            pending.keys().filter(|k| k.session_id == session_id).cloned().collect();
         for key in keys {
             if let Some(confirmation) = pending.remove(&key) {
                 let _ = confirmation.response_tx.send(false);

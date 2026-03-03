@@ -92,8 +92,7 @@ impl WalSessionManager {
 
         // SAFETY: CACHE_CAPACITY is a non-zero compile-time constant
         #[allow(clippy::expect_used)]
-        let cache_cap =
-            NonZeroUsize::new(CACHE_CAPACITY).expect("cache capacity must be > 0");
+        let cache_cap = NonZeroUsize::new(CACHE_CAPACITY).expect("cache capacity must be > 0");
 
         Ok(Self {
             storage_dir,
@@ -325,17 +324,18 @@ impl WalSessionManager {
                 return false;
             }
             // Fast path: both are Text variant — compare strings directly
-            if let (crate::MessageContent::Text(ta), crate::MessageContent::Text(tb)) = (&ma.content, &mb.content) {
+            if let (crate::MessageContent::Text(ta), crate::MessageContent::Text(tb)) =
+                (&ma.content, &mb.content)
+            {
                 if ta != tb {
                     return false;
                 }
             } else {
                 // Blocks or mixed — fall back to JSON for this single message
-                let ok =
-                    match (serde_json::to_vec(&ma.content), serde_json::to_vec(&mb.content)) {
-                        (Ok(left), Ok(right)) => left == right,
-                        _ => false,
-                    };
+                let ok = match (serde_json::to_vec(&ma.content), serde_json::to_vec(&mb.content)) {
+                    (Ok(left), Ok(right)) => left == right,
+                    _ => false,
+                };
                 if !ok {
                     return false;
                 }

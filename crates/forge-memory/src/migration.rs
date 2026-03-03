@@ -132,13 +132,7 @@ impl MemoryMigration {
         let safe: String = title
             .to_lowercase()
             .chars()
-            .map(|c| {
-                if c.is_alphanumeric() || c == '-' || c == '_' {
-                    c
-                } else {
-                    '_'
-                }
-            })
+            .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
             .collect();
 
         let mut result = String::new();

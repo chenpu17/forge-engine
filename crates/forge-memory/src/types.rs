@@ -99,7 +99,7 @@ impl MemoryIndex {
     ///
     /// Output: `<memory scope="user">\n## Section\n- ...\n</memory>`
     /// Total output capped at ~500 tokens; truncated with note if exceeded.
-    #[must_use] 
+    #[must_use]
     pub fn to_prompt_string(&self) -> String {
         let mut output = format!("<memory scope=\"{}\">\n", self.scope);
 

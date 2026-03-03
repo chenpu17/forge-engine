@@ -85,9 +85,7 @@ impl ForgeSDK {
 
         let loader = forge_memory::MemoryLoader::new(self.user_memory_dir());
         let index = match scope {
-            forge_memory::MemoryScope::User => {
-                loader.load_index(scope, None).await.ok().flatten()
-            }
+            forge_memory::MemoryScope::User => loader.load_index(scope, None).await.ok().flatten(),
             forge_memory::MemoryScope::Project => {
                 loader.load_index(scope, Some(memory_dir)).await.ok().flatten()
             }
@@ -128,8 +126,7 @@ impl ForgeSDK {
 
         let project_struct_dir = Self::project_memory_dir(working_dir);
         let project_legacy = Self::project_memory_path(working_dir);
-        if forge_memory::MemoryMigration::needs_migration(&project_legacy, &project_struct_dir)
-        {
+        if forge_memory::MemoryMigration::needs_migration(&project_legacy, &project_struct_dir) {
             if let Err(err) = forge_memory::MemoryMigration::migrate(
                 &project_legacy,
                 &project_struct_dir,
@@ -216,9 +213,7 @@ impl ForgeSDK {
         {
             let mut cache = self.memory_prompt_cache.write().await;
             cache.user_structured = user_struct_cached;
-            cache
-                .projects_structured
-                .insert(working_dir.to_path_buf(), project_struct_cached);
+            cache.projects_structured.insert(working_dir.to_path_buf(), project_struct_cached);
         }
 
         (user_mem, project_mem)

@@ -24,6 +24,5 @@ pub use health::CircuitBreaker;
 pub use transport::{AuthHeader, ProxyConfig, TransportError};
 pub use types::McpTool;
 pub use wrapper::{
-    ApiKeyAuth, McpConfig, McpManager, McpServerConfig, McpToolWrapper,
-    McpTransportType,
+    ApiKeyAuth, McpConfig, McpManager, McpServerConfig, McpToolWrapper, McpTransportType,
 };

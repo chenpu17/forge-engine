@@ -30,8 +30,8 @@ impl ForgeConfig {
         let model = std::env::var("FORGE_LLM_MODEL")
             .unwrap_or_else(|_| "claude-sonnet-4-20250514".to_string());
         let base_url = std::env::var("FORGE_LLM_BASE_URL").ok();
-        let mode = std::env::var("FORGE_LLM_MODE")
-            .unwrap_or_else(|_| "anthropic.messages".to_string());
+        let mode =
+            std::env::var("FORGE_LLM_MODE").unwrap_or_else(|_| "anthropic.messages".to_string());
         let provider = if mode.starts_with("openai") { "openai" } else { "anthropic" };
 
         let mut config = forge_sdk::ForgeConfig::default();
@@ -44,34 +44,54 @@ impl ForgeConfig {
 
     /// Set the LLM provider name.
     #[napi]
-    pub fn set_provider(&mut self, provider: String) { self.inner.llm.provider = provider; }
+    pub fn set_provider(&mut self, provider: String) {
+        self.inner.llm.provider = provider;
+    }
     /// Set the LLM model name.
     #[napi]
-    pub fn set_model(&mut self, model: String) { self.inner.llm.model = model; }
+    pub fn set_model(&mut self, model: String) {
+        self.inner.llm.model = model;
+    }
     /// Set the API key.
     #[napi]
-    pub fn set_api_key(&mut self, api_key: String) { self.inner.llm.api_key = Some(api_key); }
+    pub fn set_api_key(&mut self, api_key: String) {
+        self.inner.llm.api_key = Some(api_key);
+    }
     /// Set the base URL for the LLM provider.
     #[napi]
-    pub fn set_base_url(&mut self, base_url: String) { self.inner.llm.base_url = Some(base_url); }
+    pub fn set_base_url(&mut self, base_url: String) {
+        self.inner.llm.base_url = Some(base_url);
+    }
     /// Set the working directory.
     #[napi]
-    pub fn set_working_dir(&mut self, dir: String) { self.inner.working_dir = PathBuf::from(dir); }
+    pub fn set_working_dir(&mut self, dir: String) {
+        self.inner.working_dir = PathBuf::from(dir);
+    }
     /// Set the maximum tokens for generation.
     #[napi]
-    pub fn set_max_tokens(&mut self, max_tokens: u32) { self.inner.llm.max_tokens = max_tokens as usize; }
+    pub fn set_max_tokens(&mut self, max_tokens: u32) {
+        self.inner.llm.max_tokens = max_tokens as usize;
+    }
     /// Set the temperature for generation.
     #[napi]
-    pub fn set_temperature(&mut self, temperature: f64) { self.inner.llm.temperature = Some(temperature); }
+    pub fn set_temperature(&mut self, temperature: f64) {
+        self.inner.llm.temperature = Some(temperature);
+    }
     /// Set the bash command timeout in seconds.
     #[napi]
-    pub fn set_bash_timeout(&mut self, timeout: u32) { self.inner.tools.bash_timeout = timeout as u64; }
+    pub fn set_bash_timeout(&mut self, timeout: u32) {
+        self.inner.tools.bash_timeout = timeout as u64;
+    }
     /// Set the maximum tool output size in bytes.
     #[napi]
-    pub fn set_max_output_size(&mut self, size: u32) { self.inner.tools.max_output_size = size as usize; }
+    pub fn set_max_output_size(&mut self, size: u32) {
+        self.inner.tools.max_output_size = size as usize;
+    }
     /// Enable or disable MCP servers.
     #[napi]
-    pub fn set_mcp_enabled(&mut self, enabled: bool) { self.inner.tools.mcp.mcp_enabled = enabled; }
+    pub fn set_mcp_enabled(&mut self, enabled: bool) {
+        self.inner.tools.mcp.mcp_enabled = enabled;
+    }
     /// Set the MCP configuration file path.
     #[napi]
     pub fn set_mcp_config_path(&mut self, path: String) {
@@ -80,13 +100,19 @@ impl ForgeConfig {
     }
     /// Set the prompts directory.
     #[napi]
-    pub fn set_prompts_dir(&mut self, dir: String) { self.inner.prompts_dir = Some(PathBuf::from(dir)); }
+    pub fn set_prompts_dir(&mut self, dir: String) {
+        self.inner.prompts_dir = Some(PathBuf::from(dir));
+    }
     /// Set the default persona name.
     #[napi]
-    pub fn set_default_persona(&mut self, persona: String) { self.inner.default_persona = persona; }
+    pub fn set_default_persona(&mut self, persona: String) {
+        self.inner.default_persona = persona;
+    }
     /// Set whether to trust project-level skills.
     #[napi]
-    pub fn set_trust_project_skills(&mut self, trust: bool) { self.inner.trust_project_skills = trust; }
+    pub fn set_trust_project_skills(&mut self, trust: bool) {
+        self.inner.trust_project_skills = trust;
+    }
 
     /// Enable or disable thinking mode with optional budget.
     #[napi]
@@ -111,8 +137,10 @@ impl ForgeConfig {
             thinking.effort = Some(effort_enum);
         } else {
             self.inner.llm.thinking = Some(forge_config::ThinkingConfig {
-                enabled: true, budget_tokens: None,
-                effort: Some(effort_enum), preserve_history: None,
+                enabled: true,
+                budget_tokens: None,
+                effort: Some(effort_enum),
+                preserve_history: None,
             });
         }
     }
@@ -132,15 +160,23 @@ impl ForgeConfig {
 
     /// Get the effective model name.
     #[napi]
-    pub fn get_model(&self) -> String { self.inner.llm.effective_model() }
+    pub fn get_model(&self) -> String {
+        self.inner.llm.effective_model()
+    }
     /// Get the working directory path.
     #[napi]
-    pub fn get_working_dir(&self) -> String { self.inner.working_dir.to_string_lossy().to_string() }
+    pub fn get_working_dir(&self) -> String {
+        self.inner.working_dir.to_string_lossy().to_string()
+    }
 
     /// Clone the inner SDK config.
-    pub(crate) fn clone_inner(&self) -> forge_sdk::ForgeConfig { self.inner.clone() }
+    pub(crate) fn clone_inner(&self) -> forge_sdk::ForgeConfig {
+        self.inner.clone()
+    }
 }
 
 impl Default for ForgeConfig {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }

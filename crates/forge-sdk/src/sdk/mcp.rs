@@ -259,10 +259,7 @@ impl ForgeSDK {
     }
 
     /// Get a single MCP server configuration by name.
-    pub async fn get_mcp_server(
-        &self,
-        name: &str,
-    ) -> Option<crate::types::McpServerManageConfig> {
+    pub async fn get_mcp_server(&self, name: &str) -> Option<crate::types::McpServerManageConfig> {
         use crate::types::{McpServerManageConfig, McpTransportType};
 
         let config = self.config.read().await;
@@ -329,9 +326,7 @@ impl ForgeSDK {
             return Err(ForgeError::ConfigError("Server name cannot be empty".to_string()));
         }
         if server_config.name.contains("__") {
-            return Err(ForgeError::ConfigError(
-                "Server name cannot contain '__'".to_string(),
-            ));
+            return Err(ForgeError::ConfigError("Server name cannot contain '__'".to_string()));
         }
 
         let config_path = forge_infra::config_dir().join("mcp.toml");
@@ -425,9 +420,7 @@ impl ForgeSDK {
 
         if server_config.name != name {
             if server_config.name.contains("__") {
-                return Err(ForgeError::ConfigError(
-                    "Server name cannot contain '__'".to_string(),
-                ));
+                return Err(ForgeError::ConfigError("Server name cannot contain '__'".to_string()));
             }
             if mcp_config.servers.iter().any(|s| s.name == server_config.name) {
                 return Err(ForgeError::ConfigError(format!(
@@ -476,7 +469,10 @@ impl ForgeSDK {
                 let _ = crate::extensions::keychain::delete_mcp_api_key(name);
             }
             if let Ok(Some(proxy_pwd)) = crate::extensions::keychain::get_mcp_proxy_password(name) {
-                let _ = crate::extensions::keychain::set_mcp_proxy_password(&server_config.name, &proxy_pwd);
+                let _ = crate::extensions::keychain::set_mcp_proxy_password(
+                    &server_config.name,
+                    &proxy_pwd,
+                );
                 let _ = crate::extensions::keychain::delete_mcp_proxy_password(name);
             }
         }
@@ -551,10 +547,7 @@ impl ForgeSDK {
     }
 
     /// Test connection to an MCP server.
-    pub async fn test_mcp_connection(
-        &self,
-        name: &str,
-    ) -> crate::types::McpConnectionTestResult {
+    pub async fn test_mcp_connection(&self, name: &str) -> crate::types::McpConnectionTestResult {
         use crate::types::{McpConnectionTestResult, McpToolInfo, McpTransportType};
         use forge_mcp::{McpServerConfig, McpTransportType as ToolsTransport};
 
@@ -576,7 +569,8 @@ impl ForgeSDK {
             McpTransportType::StreamableHttp => ToolsTransport::StreamableHttp,
         };
 
-        let keychain_key = crate::extensions::keychain::get_mcp_api_key(&server_config.name).ok().flatten();
+        let keychain_key =
+            crate::extensions::keychain::get_mcp_api_key(&server_config.name).ok().flatten();
         let api_key = if server_config.api_key_from_keychain {
             keychain_key.or(server_config.api_key)
         } else {

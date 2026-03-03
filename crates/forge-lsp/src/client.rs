@@ -348,10 +348,7 @@ const MAX_STDERR_LINE_LEN: usize = 4 * 1024;
 /// attempts to resynchronize on the next valid `Content-Length` frame instead of
 /// failing hard on malformed header blocks.
 #[allow(clippy::too_many_lines)]
-async fn read_responses<R>(
-    stdout: R,
-    pending: PendingMap,
-) -> Result<(), LspError>
+async fn read_responses<R>(stdout: R, pending: PendingMap) -> Result<(), LspError>
 where
     R: tokio::io::AsyncRead + Unpin,
 {

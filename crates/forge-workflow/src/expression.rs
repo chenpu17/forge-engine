@@ -26,7 +26,7 @@ pub struct ExpressionEvaluator;
 
 impl ExpressionEvaluator {
     /// 创建新的求值器
-    #[must_use] 
+    #[must_use]
     pub const fn new() -> Self {
         Self
     }

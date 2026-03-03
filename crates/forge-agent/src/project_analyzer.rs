@@ -7,11 +7,9 @@
 //! by design — project analysis is inherently a coding/development feature.
 //! When forge-engine is used for non-coding personas, this module is not invoked.
 
-use crate::{
-    AgentConfig, GenerationConfig, LoopProtectionConfig, ReflectionConfig,
-};
 use crate::core_loop::CoreAgent;
 use crate::executor::ToolExecutor;
+use crate::{AgentConfig, GenerationConfig, LoopProtectionConfig, ReflectionConfig};
 use anyhow::{Context, Result};
 use forge_domain::AgentEvent;
 use forge_llm::LlmProvider;
@@ -336,8 +334,7 @@ impl ProjectAnalyzer {
         };
         let agent = CoreAgent::new(self.provider.clone(), executor, agent_config);
 
-        let mut stream =
-            agent.process(&analysis_prompt).context("Failed to start analysis")?;
+        let mut stream = agent.process(&analysis_prompt).context("Failed to start analysis")?;
 
         let mut full_response = String::new();
 

@@ -18,7 +18,9 @@ use crate::reflector::{
     Reflector,
 };
 use crate::verifier::{apply_verifier_decision, VerifierPipeline, VerifierStats};
-use crate::{AgentConfig, AgentError, ConfirmationHandler, ConfirmationLevel, LoopProtectionConfig, Result};
+use crate::{
+    AgentConfig, AgentError, ConfirmationHandler, ConfirmationLevel, LoopProtectionConfig, Result,
+};
 use forge_domain::{AgentEvent, ToolCall, ToolResult};
 use forge_llm::ChatMessage;
 use forge_tools::trust_permission::{PermissionCheckResult, TrustAwarePermissionManager};
@@ -202,8 +204,7 @@ pub fn partition_tool_calls(
     let mut serial_calls: Vec<ToolCall> = Vec::new();
 
     for call in tool_calls {
-        let is_readonly =
-            executor.registry().get(&call.name).is_some_and(|t| t.is_readonly());
+        let is_readonly = executor.registry().get(&call.name).is_some_and(|t| t.is_readonly());
 
         let is_auto_allowed = if is_readonly {
             let confirmation_level = executor.get_confirmation_level(call);
@@ -401,10 +402,8 @@ pub async fn check_tool_permission(
             return ToolPermissionOutcome::Skip(result);
         }
         PermissionCheckResult::HardBlocked { reason } => {
-            let result = ToolResult::error(
-                &call.id,
-                format!("Operation blocked by safety layer: {reason}"),
-            );
+            let result =
+                ToolResult::error(&call.id, format!("Operation blocked by safety layer: {reason}"));
             let _ = tx
                 .send(Ok(AgentEvent::ToolResult {
                     id: call.id.clone(),
@@ -601,15 +600,10 @@ pub(crate) async fn dispatch_and_execute_tools(
 ) -> Result<ToolDispatchOutput> {
     let mut tool_results: Vec<ToolResult> = Vec::new();
     let mut rollback_hint: Option<String> = None;
-    let coordinator = ToolExecutionCoordinator::new(
-        executor,
-        permission_manager,
-        &config.working_dir,
-        config,
-    );
+    let coordinator =
+        ToolExecutionCoordinator::new(executor, permission_manager, &config.working_dir, config);
 
-    let ToolCallBatches { parallel_calls, mut serial_calls } =
-        coordinator.partition(tool_calls);
+    let ToolCallBatches { parallel_calls, mut serial_calls } = coordinator.partition(tool_calls);
 
     // Execute parallel-eligible tools concurrently
     if parallel_calls.len() > 1 {
@@ -646,10 +640,7 @@ pub(crate) async fn dispatch_and_execute_tools(
                 }))
                 .await;
 
-            apply_verifier_decision(
-                verifier, call, result, true, tx, state.verifier_stats,
-            )
-            .await?;
+            apply_verifier_decision(verifier, call, result, true, tx, state.verifier_stats).await?;
 
             state.reflector.record_result(result, &call.name);
 
@@ -658,16 +649,12 @@ pub(crate) async fn dispatch_and_execute_tools(
                 match &analysis.recovery_action {
                     RecoveryAction::Stop { reason } => {
                         let _ = tx
-                            .send(Ok(AgentEvent::Error {
-                                message: format!("Stopping: {reason}"),
-                            }))
+                            .send(Ok(AgentEvent::Error { message: format!("Stopping: {reason}") }))
                             .await;
                         return Err(AgentError::PlanningError(reason.clone()));
                     }
                     RecoveryAction::ReportAndContinue { message } => {
-                        let _ = tx
-                            .send(Ok(AgentEvent::Error { message: message.clone() }))
-                            .await;
+                        let _ = tx.send(Ok(AgentEvent::Error { message: message.clone() })).await;
                     }
                     _ => {}
                 }
@@ -727,8 +714,7 @@ async fn dispatch_serial_calls(
     rollback_hint: &mut Option<String>,
 ) -> Result<()> {
     for call in serial_calls {
-        let is_readonly =
-            executor.registry().get(&call.name).is_some_and(|t| t.is_readonly());
+        let is_readonly = executor.registry().get(&call.name).is_some_and(|t| t.is_readonly());
         let side_effect_marker = build_side_effect_marker(call);
 
         // Idempotent replay guard for write-capable operations.
@@ -867,15 +853,11 @@ async fn dispatch_serial_calls(
             }))
             .await;
 
-        apply_verifier_decision(
-            verifier, call, &result, is_readonly, tx, state.verifier_stats,
-        )
-        .await?;
+        apply_verifier_decision(verifier, call, &result, is_readonly, tx, state.verifier_stats)
+            .await?;
 
         // Parse plan mode markers ONLY from plan mode tools
-        if !result.is_error
-            && (call.name == "enter_plan_mode" || call.name == "exit_plan_mode")
-        {
+        if !result.is_error && (call.name == "enter_plan_mode" || call.name == "exit_plan_mode") {
             match parse_plan_mode_marker(&result.output) {
                 PlanModeMarker::Enter(plan_file) => {
                     tracing::info!(plan_file = ?plan_file, "Plan mode marker detected: entering plan mode");
@@ -883,7 +865,8 @@ async fn dispatch_serial_calls(
                 }
                 PlanModeMarker::Exit { saved } => {
                     tracing::info!(saved = saved, "Plan mode marker detected: exiting plan mode");
-                    let _ = tx.send(Ok(AgentEvent::PlanModeExited { saved, plan_file: None })).await;
+                    let _ =
+                        tx.send(Ok(AgentEvent::PlanModeExited { saved, plan_file: None })).await;
                 }
                 PlanModeMarker::None => {}
             }
@@ -909,9 +892,7 @@ async fn dispatch_serial_calls(
                 build_episode_signature(&call.name, analysis.error_kind, &result.output);
             let mut episodic_strategy: Option<String> = None;
             if let Some(store) = episodic_store {
-                if let Some(record) =
-                    store.find_latest(&signature, context_fingerprint).await?
-                {
+                if let Some(record) = store.find_latest(&signature, context_fingerprint).await? {
                     episodic_strategy = Some(record.strategy.clone());
                     let _ = tx
                         .send(Ok(AgentEvent::Recovery {

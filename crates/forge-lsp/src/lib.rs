@@ -212,10 +212,7 @@ mod tests {
         let manager = LspManager::new(PathBuf::from("/tmp"));
         let result = manager.client_for_file(Path::new("file.xyz")).await;
         assert!(result.is_err());
-        assert!(matches!(
-            result.expect_err("should be NoServer"),
-            LspError::NoServer(_)
-        ));
+        assert!(matches!(result.expect_err("should be NoServer"), LspError::NoServer(_)));
     }
 
     #[tokio::test]
@@ -230,9 +227,6 @@ mod tests {
         let manager = LspManager::new(PathBuf::from("/tmp"));
         let result = manager.client_for_language("brainfuck").await;
         assert!(result.is_err());
-        assert!(matches!(
-            result.expect_err("should be NoServer"),
-            LspError::NoServer(_)
-        ));
+        assert!(matches!(result.expect_err("should be NoServer"), LspError::NoServer(_)));
     }
 }

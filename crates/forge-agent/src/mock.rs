@@ -243,8 +243,8 @@ async fn send_mock_response(
                 .await;
             // Parse input as JSON Value — panic on invalid JSON so test failures are obvious
             #[allow(clippy::expect_used)]
-            let input_value: serde_json::Value =
-                serde_json::from_str(&input).expect("MockResponse::ToolCall input must be valid JSON");
+            let input_value: serde_json::Value = serde_json::from_str(&input)
+                .expect("MockResponse::ToolCall input must be valid JSON");
             let _ = tx.send(Ok(LlmEvent::ToolUseEnd { id, name, input: input_value })).await;
             let _ = tx
                 .send(Ok(LlmEvent::MessageEnd {
@@ -267,8 +267,8 @@ async fn send_mock_response(
                     .await;
                 // Parse input as JSON Value — panic on invalid JSON so test failures are obvious
                 #[allow(clippy::expect_used)]
-                let input_value: serde_json::Value =
-                    serde_json::from_str(&input).expect("MockResponse::ToolCalls input must be valid JSON");
+                let input_value: serde_json::Value = serde_json::from_str(&input)
+                    .expect("MockResponse::ToolCalls input must be valid JSON");
                 let _ = tx.send(Ok(LlmEvent::ToolUseEnd { id, name, input: input_value })).await;
             }
             let _ = tx

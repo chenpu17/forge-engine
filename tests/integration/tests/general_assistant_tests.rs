@@ -49,11 +49,8 @@ bash_readonly = false
     .expect("write assistant.toml");
 
     // coder persona prompt (needed since it's the default)
-    std::fs::write(
-        personas_dir.join("coder.md"),
-        "You are a coding assistant.",
-    )
-    .expect("write coder.md");
+    std::fs::write(personas_dir.join("coder.md"), "You are a coding assistant.")
+        .expect("write coder.md");
 
     let prompts_dir_clone = prompts_dir.clone();
     let persona_clone = persona.clone();
@@ -111,8 +108,7 @@ async fn general_assistant_lsp_tools_disabled_in_snapshot() {
         "lsp_references".to_string(),
         "symbols".to_string(),
     ])
-    .await
-    .expect("set disabled tools");
+    .await;
 
     let snapshot = sdk.tool_registry_snapshot().await;
     let snapshot_names = snapshot.list_names();
@@ -129,10 +125,7 @@ async fn general_assistant_lsp_tools_disabled_in_snapshot() {
         !snapshot_names.contains(&"lsp_references"),
         "lsp_references should be filtered from snapshot"
     );
-    assert!(
-        !snapshot_names.contains(&"symbols"),
-        "symbols should be filtered from snapshot"
-    );
+    assert!(!snapshot_names.contains(&"symbols"), "symbols should be filtered from snapshot");
 }
 
 #[tokio::test]
@@ -140,14 +133,8 @@ async fn general_assistant_has_web_tools() {
     let sdk = build_sdk_with_persona("assistant").await;
     let tools = sdk.list_tools().await;
 
-    assert!(
-        tools.contains(&"web_fetch".to_string()),
-        "should have web_fetch tool"
-    );
-    assert!(
-        tools.contains(&"web_search".to_string()),
-        "should have web_search tool"
-    );
+    assert!(tools.contains(&"web_fetch".to_string()), "should have web_fetch tool");
+    assert!(tools.contains(&"web_search".to_string()), "should have web_search tool");
 }
 
 #[tokio::test]
@@ -155,14 +142,8 @@ async fn general_assistant_has_interaction_tools() {
     let sdk = build_sdk_with_persona("assistant").await;
     let tools = sdk.list_tools().await;
 
-    assert!(
-        tools.contains(&"ask_user".to_string()),
-        "should have ask_user tool"
-    );
-    assert!(
-        tools.contains(&"todo_write".to_string()),
-        "should have todo_write tool"
-    );
+    assert!(tools.contains(&"ask_user".to_string()), "should have ask_user tool");
+    assert!(tools.contains(&"todo_write".to_string()), "should have todo_write tool");
 }
 
 #[tokio::test]

@@ -86,8 +86,7 @@ impl SecretStore for KeychainStore {
             Ok(Some(password))
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            if stderr.contains("could not be found")
-                || stderr.contains("SecKeychainSearchCopyNext")
+            if stderr.contains("could not be found") || stderr.contains("SecKeychainSearchCopyNext")
             {
                 Ok(None)
             } else {
@@ -105,9 +104,12 @@ impl SecretStore for KeychainStore {
         let output = Command::new("security")
             .args([
                 "add-generic-password",
-                "-s", SERVICE_NAME,
-                "-a", key,
-                "-X", &hex_password,
+                "-s",
+                SERVICE_NAME,
+                "-a",
+                key,
+                "-X",
+                &hex_password,
                 "-U", // Update if exists, create if not
             ])
             .output()
@@ -133,8 +135,7 @@ impl SecretStore for KeychainStore {
             Ok(())
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            if stderr.contains("could not be found")
-                || stderr.contains("SecKeychainSearchCopyNext")
+            if stderr.contains("could not be found") || stderr.contains("SecKeychainSearchCopyNext")
             {
                 Ok(())
             } else {

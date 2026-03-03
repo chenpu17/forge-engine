@@ -466,10 +466,9 @@ mod executor_tests {
             state: &WorkflowState,
         ) -> Result<serde_json::Value, ExecutionError> {
             // 简单实现：从状态中获取值
-            state.get(expression).map_or_else(
-                || Ok(serde_json::json!(expression)),
-                |value| Ok(value.clone()),
-            )
+            state
+                .get(expression)
+                .map_or_else(|| Ok(serde_json::json!(expression)), |value| Ok(value.clone()))
         }
     }
 
@@ -518,10 +517,9 @@ mod executor_tests {
             expression: &str,
             state: &WorkflowState,
         ) -> Result<serde_json::Value, ExecutionError> {
-            state.get(expression).map_or_else(
-                || Ok(serde_json::json!(expression)),
-                |value| Ok(value.clone()),
-            )
+            state
+                .get(expression)
+                .map_or_else(|| Ok(serde_json::json!(expression)), |value| Ok(value.clone()))
         }
     }
 
@@ -775,7 +773,9 @@ mod checkpoint_tests {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod definition_tests {
-    use crate::definition::{GraphChange, GraphChanges, GraphDefinition, GraphMetadataDefinition, NodeDefinition};
+    use crate::definition::{
+        GraphChange, GraphChanges, GraphDefinition, GraphMetadataDefinition, NodeDefinition,
+    };
     use crate::graph::Graph;
     use crate::node::{Node, NodeConfig, ToolNodeConfig};
     use std::collections::HashMap;
@@ -975,10 +975,9 @@ mod router_tests {
             _state: &WorkflowState,
         ) -> Result<serde_json::Value, ExecutionError> {
             // 返回配置的 route 值
-            self.route_value.as_ref().map_or_else(
-                || Ok(serde_json::Value::Null),
-                |v| Ok(serde_json::json!(v)),
-            )
+            self.route_value
+                .as_ref()
+                .map_or_else(|| Ok(serde_json::Value::Null), |v| Ok(serde_json::json!(v)))
         }
     }
 

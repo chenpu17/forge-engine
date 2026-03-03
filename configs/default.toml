@@ -51,3 +51,23 @@ mcp_enabled = true
 # [tools.proxy.auth]
 # username = "user"
 # password_env = "PROXY_PASSWORD"  # Read password from environment variable
+
+[cost]
+enabled = true
+# session_budget_usd = 10.0       # Overall session budget (USD). Uncomment to enable.
+warning_threshold = 0.8            # Warn at 80% of budget
+
+# Per-agent-type budget limits (USD). Uncomment to enable.
+# [cost.agent_budgets]
+# explore = 0.50
+# plan = 1.00
+# "general-purpose" = 2.00
+# research = 1.00
+# writer = 0.50
+# "data-analyst" = 1.00
+
+# Custom pricing overrides (built-in pricing covers Claude and OpenAI models).
+# [[cost.pricing]]
+# model_pattern = "my-custom-model-*"
+# input_cost_per_mtok = 1.0
+# output_cost_per_mtok = 5.0

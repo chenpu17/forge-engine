@@ -131,7 +131,12 @@ impl From<AgentEvent> for PyAgentEvent {
                 is_error: Some(is_error),
                 ..Default::default()
             },
-            AgentEvent::TokenUsage { input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens } => Self {
+            AgentEvent::TokenUsage {
+                input_tokens,
+                output_tokens,
+                cache_read_tokens,
+                cache_creation_tokens,
+            } => Self {
                 event_type: "token_usage".into(),
                 input_tokens: Some(input_tokens),
                 output_tokens: Some(output_tokens),
@@ -167,9 +172,7 @@ impl From<AgentEvent> for PyAgentEvent {
             AgentEvent::Done { summary } => {
                 Self { event_type: "done".into(), content: summary, ..Default::default() }
             }
-            AgentEvent::Cancelled => {
-                Self { event_type: "cancelled".into(), ..Default::default() }
-            }
+            AgentEvent::Cancelled => Self { event_type: "cancelled".into(), ..Default::default() },
             AgentEvent::Error { message } => Self {
                 event_type: "error".into(),
                 content: Some(message),
@@ -188,13 +191,15 @@ impl From<AgentEvent> for PyAgentEvent {
                 limit: Some(limit),
                 ..Default::default()
             },
-            AgentEvent::ContextCompressed { messages_before, messages_after, tokens_saved } => Self {
-                event_type: "context_compressed".into(),
-                messages_before: Some(messages_before),
-                messages_after: Some(messages_after),
-                tokens_saved: Some(tokens_saved),
-                ..Default::default()
-            },
+            AgentEvent::ContextCompressed { messages_before, messages_after, tokens_saved } => {
+                Self {
+                    event_type: "context_compressed".into(),
+                    messages_before: Some(messages_before),
+                    messages_after: Some(messages_after),
+                    tokens_saved: Some(tokens_saved),
+                    ..Default::default()
+                }
+            }
             AgentEvent::ContextRecoveryAttempt { message } => Self {
                 event_type: "context_recovery_attempt".into(),
                 content: Some(message),
@@ -219,11 +224,9 @@ impl From<AgentEvent> for PyAgentEvent {
                 success: Some(success),
                 ..Default::default()
             },
-            AgentEvent::PlanModeEntered { plan_file } => Self {
-                event_type: "plan_mode_entered".into(),
-                plan_file,
-                ..Default::default()
-            },
+            AgentEvent::PlanModeEntered { plan_file } => {
+                Self { event_type: "plan_mode_entered".into(), plan_file, ..Default::default() }
+            }
             AgentEvent::PlanModeExited { saved, plan_file } => Self {
                 event_type: "plan_mode_exited".into(),
                 saved: Some(saved),
@@ -239,6 +242,33 @@ impl From<AgentEvent> for PyAgentEvent {
                 event_type: "rolled_back".into(),
                 content: Some(reason),
                 messages_after: Some(files_restored),
+                ..Default::default()
+            },
+            AgentEvent::CostUpdate { agent_id, estimated_cost_usd, .. } => Self {
+                event_type: "cost_update".into(),
+                tool_id: Some(agent_id),
+                content: Some(format!("{estimated_cost_usd:.6}")),
+                ..Default::default()
+            },
+            AgentEvent::CostWarning { agent_id, current_usd, limit_usd, percentage } => Self {
+                event_type: "cost_warning".into(),
+                tool_id: Some(agent_id),
+                content: Some(format!(
+                    "Cost warning: ${current_usd:.4}/${limit_usd:.4} ({percentage:.0}%)"
+                )),
+                ..Default::default()
+            },
+            AgentEvent::BudgetExceeded { agent_id, current_usd, limit_usd } => Self {
+                event_type: "budget_exceeded".into(),
+                tool_id: Some(agent_id),
+                content: Some(format!(
+                    "Budget exceeded: ${current_usd:.4} > ${limit_usd:.4}"
+                )),
+                ..Default::default()
+            },
+            AgentEvent::TraceRecorded { trace_id } => Self {
+                event_type: "trace_recorded".into(),
+                tool_id: Some(trace_id),
                 ..Default::default()
             },
         }

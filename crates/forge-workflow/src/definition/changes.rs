@@ -88,7 +88,7 @@ pub struct GraphChanges {
 
 impl GraphChanges {
     /// 创建空的变更集合
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -99,13 +99,13 @@ impl GraphChanges {
     }
 
     /// 是否为空
-    #[must_use] 
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.changes.is_empty()
     }
 
     /// 变更数量
-    #[must_use] 
+    #[must_use]
     pub fn len(&self) -> usize {
         self.changes.len()
     }

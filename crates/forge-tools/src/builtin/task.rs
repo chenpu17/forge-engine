@@ -376,13 +376,32 @@ pub struct TaskExecutionReport {
     pub tokens_used: usize,
     /// Number of tool calls issued by the sub-agent.
     pub tool_calls: usize,
+    /// Trace ID from the sub-agent (if trace recording was enabled).
+    pub sub_trace_id: Option<String>,
+    /// Structured JSON payload (typed output from sub-agent, if parsed).
+    pub structured: Option<serde_json::Value>,
+    /// Schema version of the structured payload.
+    pub schema_version: Option<u16>,
+    /// Execution duration in milliseconds.
+    pub duration_ms: u64,
+    /// Model used for this sub-agent execution.
+    pub model: String,
 }
 
 impl TaskExecutionReport {
     /// Build a report from plain output when metrics are unavailable.
     #[must_use]
-    pub const fn from_output(output: String) -> Self {
-        Self { output, tokens_used: 0, tool_calls: 0 }
+    pub fn from_output(output: String) -> Self {
+        Self {
+            output,
+            tokens_used: 0,
+            tool_calls: 0,
+            sub_trace_id: None,
+            structured: None,
+            schema_version: None,
+            duration_ms: 0,
+            model: String::new(),
+        }
     }
 }
 
@@ -441,6 +460,8 @@ pub struct TaskTool {
     working_dir: std::path::PathBuf,
     /// Maximum concurrent subagent tasks
     max_concurrent_subagents: usize,
+    /// Allowed sub-agent types from persona config. `None` = all allowed.
+    allowed_subagents: Arc<parking_lot::RwLock<Option<Vec<String>>>>,
 }
 
 impl TaskTool {
@@ -453,6 +474,7 @@ impl TaskTool {
             background_manager: None,
             working_dir: std::env::current_dir().unwrap_or_default(),
             max_concurrent_subagents: 5,
+            allowed_subagents: Arc::new(parking_lot::RwLock::new(None)),
         }
     }
 
@@ -471,6 +493,7 @@ impl TaskTool {
             background_manager: None,
             working_dir: std::env::current_dir().unwrap_or_default(),
             max_concurrent_subagents: 5,
+            allowed_subagents: Arc::new(parking_lot::RwLock::new(None)),
         }
     }
 
@@ -482,14 +505,49 @@ impl TaskTool {
         background_manager: Option<Arc<crate::background::BackgroundTaskManager>>,
         working_dir: std::path::PathBuf,
         max_concurrent_subagents: usize,
+        allowed_subagents: Arc<parking_lot::RwLock<Option<Vec<String>>>>,
     ) -> Self {
-        Self { state, executor, background_manager, working_dir, max_concurrent_subagents }
+        Self {
+            state,
+            executor,
+            background_manager,
+            working_dir,
+            max_concurrent_subagents,
+            allowed_subagents,
+        }
     }
 
     /// Get the shared state
     #[must_use]
     pub fn state(&self) -> Arc<RwLock<TaskState>> {
         self.state.clone()
+    }
+
+    /// Get the shared allowed-subagents lock for external updates.
+    #[must_use]
+    pub fn allowed_subagents(&self) -> Arc<parking_lot::RwLock<Option<Vec<String>>>> {
+        self.allowed_subagents.clone()
+    }
+
+    /// Resolve the effective subagent type enum for the JSON schema.
+    fn effective_subagent_types(&self) -> Vec<String> {
+        let all_types = vec![
+            "general-purpose", "explore", "plan", "research", "writer", "data-analyst",
+        ];
+        let guard = self.allowed_subagents.read();
+        match guard.as_ref() {
+            Some(allowed) => all_types
+                .into_iter()
+                .filter(|t| {
+                    let parsed = SubAgentType::from_str(t);
+                    allowed.iter().any(|a| {
+                        SubAgentType::from_str(a).is_some_and(|at| Some(at) == parsed)
+                    })
+                })
+                .map(String::from)
+                .collect(),
+            None => all_types.into_iter().map(String::from).collect(),
+        }
     }
 
     /// Handle resume of a previous task
@@ -610,29 +668,38 @@ impl TaskTool {
             );
         }
 
-        // Execute the task synchronously
-        let result = self.executor.execute_task(&new_task).await;
+        // Execute the task synchronously (use report variant for structured data)
+        let result = self.executor.execute_task_report(&new_task).await;
 
         // Update task state
         {
             let mut state = self.state.write().await;
             if let Some(t) = state.get_task_mut(resume_id) {
                 match &result {
-                    Ok(output) => t.complete(output.clone()),
-                    Err(error) => t.fail(error.clone()),
+                    Ok(report) => t.complete(report.output.clone()),
+                    Err(error) => t.fail(error.message.clone()),
                 }
             }
         }
 
-        // Return result
+        // Return result with structured data
         match result {
-            Ok(output) => Ok(ToolOutput::success(format!(
-                "## Resumed Task: {}\n\n### Sub-agent Report\n\n{output}\n\n---\nAgent ID: {resume_id}",
-                new_task.description
-            ))),
+            Ok(report) => {
+                let mut output = ToolOutput::success(format!(
+                    "## Resumed Task: {}\n\n### Sub-agent Report\n\n{}\n\n---\nAgent ID: {resume_id}",
+                    new_task.description, report.output
+                ));
+                if let Some(data) = report.structured {
+                    output = output.with_data(data);
+                }
+                if let Some(version) = report.schema_version {
+                    output = output.with_schema_version(version);
+                }
+                Ok(output)
+            }
             Err(error) => Ok(ToolOutput::error(format!(
-                "Resumed task '{}' failed: {error}\n\nAgent ID: {resume_id}",
-                new_task.description
+                "Resumed task '{}' failed: {}\n\nAgent ID: {resume_id}",
+                new_task.description, error.message
             ))),
         }
     }
@@ -651,6 +718,11 @@ impl Tool for TaskTool {
     }
 
     fn parameters_schema(&self) -> Value {
+        let subagent_types: Vec<Value> = self
+            .effective_subagent_types()
+            .into_iter()
+            .map(Value::String)
+            .collect();
         json!({
             "type": "object",
             "properties": {
@@ -664,7 +736,7 @@ impl Tool for TaskTool {
                 },
                 "subagent_type": {
                     "type": "string",
-                    "enum": ["general-purpose", "explore", "plan", "research", "writer", "data-analyst"],
+                    "enum": subagent_types,
                     "description": "The type of specialized sub-agent to use"
                 },
                 "model": {
@@ -722,11 +794,24 @@ impl Tool for TaskTool {
             ))
         })?;
 
+        // Early check: reject subagent types not allowed by persona
+        {
+            let guard = self.allowed_subagents.read();
+            if let Some(ref allowed) = *guard {
+                let is_allowed = allowed
+                    .iter()
+                    .any(|a| SubAgentType::from_str(a).is_some_and(|t| t == subagent_type));
+                if !is_allowed {
+                    return Err(ToolError::InvalidParams(format!(
+                        "Sub-agent type '{subagent_type_str}' is not enabled for the current persona. Allowed: {allowed:?}"
+                    )));
+                }
+            }
+        }
+
         // Parse optional model tier
-        let model_tier = params
-            .get("model")
-            .and_then(|v| v.as_str())
-            .map_or(ModelTier::Default, |model_str| {
+        let model_tier =
+            params.get("model").and_then(|v| v.as_str()).map_or(ModelTier::Default, |model_str| {
                 ModelTier::from_str(model_str).unwrap_or(ModelTier::Default)
             });
 
@@ -813,32 +898,41 @@ impl Tool for TaskTool {
                     }
                 }
             }
-            tracing::warn!(
-                "Background execution requested but no background manager available"
-            );
+            tracing::warn!("Background execution requested but no background manager available");
         }
 
-        // Execute the task synchronously
-        let result = self.executor.execute_task(&task).await;
+        // Execute the task synchronously (use report variant for structured data)
+        let result = self.executor.execute_task_report(&task).await;
 
         // Update task state
         {
             let mut state = self.state.write().await;
             if let Some(task) = state.get_task_mut(&task_id) {
                 match &result {
-                    Ok(output) => task.complete(output.clone()),
-                    Err(error) => task.fail(error.clone()),
+                    Ok(report) => task.complete(report.output.clone()),
+                    Err(error) => task.fail(error.message.clone()),
                 }
             }
         }
 
-        // Return result with metadata
+        // Return result with metadata and structured data
         match result {
-            Ok(output) => Ok(ToolOutput::success(format!(
-                "## Task: {description}\n\n### Sub-agent Report\n\n{output}\n\n---\nAgent ID: {task_id}"
-            ))),
+            Ok(report) => {
+                let mut output = ToolOutput::success(format!(
+                    "## Task: {description}\n\n### Sub-agent Report\n\n{}\n\n---\nAgent ID: {task_id}",
+                    report.output
+                ));
+                if let Some(data) = report.structured {
+                    output = output.with_data(data);
+                }
+                if let Some(version) = report.schema_version {
+                    output = output.with_schema_version(version);
+                }
+                Ok(output)
+            }
             Err(error) => Ok(ToolOutput::error(format!(
-                "Task '{description}' failed: {error}\n\nAgent ID: {task_id}"
+                "Task '{description}' failed: {}\n\nAgent ID: {task_id}",
+                error.message
             ))),
         }
     }
@@ -1103,5 +1197,77 @@ mod tests {
         let state = tool.state.read().await;
         let task = state.all_tasks()[0];
         assert_eq!(task.nesting_depth, 1);
+    }
+
+    /// Mock executor that returns structured data in reports.
+    struct StructuredMockExecutor;
+
+    #[async_trait]
+    impl TaskExecutor for StructuredMockExecutor {
+        async fn execute_task(&self, task: &TaskInstance) -> std::result::Result<String, String> {
+            Ok(format!("Explored: {}", task.description))
+        }
+
+        async fn execute_task_report(
+            &self,
+            task: &TaskInstance,
+        ) -> std::result::Result<TaskExecutionReport, TaskExecutionError> {
+            Ok(TaskExecutionReport {
+                output: format!("Explored: {}", task.description),
+                tokens_used: 100,
+                tool_calls: 3,
+                sub_trace_id: None,
+                structured: Some(json!({
+                    "files_found": ["src/main.rs"],
+                    "structure_summary": "A Rust project"
+                })),
+                schema_version: Some(1),
+                duration_ms: 500,
+                model: "test-model".to_string(),
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn test_task_tool_propagates_structured_data() {
+        let tool = TaskTool::new(Arc::new(StructuredMockExecutor));
+
+        let params = json!({
+            "description": "Explore codebase",
+            "prompt": "Find all Rust files",
+            "subagent_type": "explore"
+        });
+
+        let ctx = ToolContext::default();
+        let result = tool.execute(params, &ctx).await.expect("execute should succeed");
+
+        assert!(!result.is_error);
+        assert!(result.content.contains("Explore codebase"));
+
+        // Verify structured data was propagated
+        let data = result.data.expect("should have structured data");
+        assert_eq!(data["files_found"][0], "src/main.rs");
+        assert_eq!(data["structure_summary"], "A Rust project");
+
+        // Verify schema version was propagated
+        assert_eq!(result.schema_version, Some(1));
+    }
+
+    #[tokio::test]
+    async fn test_task_tool_no_structured_data_when_absent() {
+        let tool = TaskTool::with_mock_executor();
+
+        let params = json!({
+            "description": "Simple task",
+            "prompt": "Do something",
+            "subagent_type": "explore"
+        });
+
+        let ctx = ToolContext::default();
+        let result = tool.execute(params, &ctx).await.expect("execute should succeed");
+
+        assert!(!result.is_error);
+        assert!(result.data.is_none());
+        assert!(result.schema_version.is_none());
     }
 }

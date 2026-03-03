@@ -388,7 +388,7 @@ impl LlmProvider for AnthropicProvider {
                                             (byte_stream, sse, tool_parser, thinking_active),
                                         ));
                                     }
-                                    Ok(None) => {},
+                                    Ok(None) => {}
                                     Err(e) => {
                                         return Some((
                                             Err(e),

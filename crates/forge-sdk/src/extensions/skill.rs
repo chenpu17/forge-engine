@@ -89,9 +89,7 @@ impl SkillRegistry {
     ///
     /// Returns error if skill not found.
     pub fn get_full(&self, name: &str) -> crate::error::Result<SkillDefinition> {
-        Err(crate::error::ForgeError::ConfigError(format!(
-            "Skill '{name}' not found"
-        )))
+        Err(crate::error::ForgeError::ConfigError(format!("Skill '{name}' not found")))
     }
 
     /// Get configured skill search paths.

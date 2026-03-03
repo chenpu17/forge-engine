@@ -39,11 +39,7 @@ impl SkillError {
     /// Create a tool-not-allowed error
     #[must_use]
     pub fn tool_not_allowed(tool: &str, skill: &str, allowed: Vec<String>) -> Self {
-        Self::ToolNotAllowed {
-            tool: tool.to_string(),
-            skill: skill.to_string(),
-            allowed,
-        }
+        Self::ToolNotAllowed { tool: tool.to_string(), skill: skill.to_string(), allowed }
     }
 }
 

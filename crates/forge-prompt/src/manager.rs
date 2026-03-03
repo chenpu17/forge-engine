@@ -78,11 +78,7 @@ impl PromptManager {
         let current_persona = if personas.contains_key(DEFAULT_PERSONA) {
             DEFAULT_PERSONA.to_string()
         } else {
-            personas
-                .keys()
-                .next()
-                .cloned()
-                .unwrap_or_else(|| DEFAULT_PERSONA.to_string())
+            personas.keys().next().cloned().unwrap_or_else(|| DEFAULT_PERSONA.to_string())
         };
 
         tracing::info!(
@@ -201,10 +197,7 @@ impl PromptManager {
         if !ctx.skills.is_empty() {
             prompt.push_str("\n## Available Skills\n\n");
             for skill in &ctx.skills {
-                let hint = skill
-                    .argument_hint
-                    .as_deref()
-                    .unwrap_or("");
+                let hint = skill.argument_hint.as_deref().unwrap_or("");
                 let _ = writeln!(
                     prompt,
                     "- `/{name}` {hint} — {desc}",
@@ -237,50 +230,37 @@ impl PromptManager {
         Ok(())
     }
 
-    fn load_personas(
-        prompts_dir: &Path,
-    ) -> Result<HashMap<String, PersonaConfig>> {
+    fn load_personas(prompts_dir: &Path) -> Result<HashMap<String, PersonaConfig>> {
         let personas_dir = prompts_dir.join("personas");
         let mut personas = HashMap::new();
         if !personas_dir.exists() {
             return Ok(personas);
         }
 
-        let configs_dir = prompts_dir
-            .parent()
-            .map(|p| p.join("configs/personas"))
-            .unwrap_or_default();
+        let configs_dir =
+            prompts_dir.parent().map(|p| p.join("configs/personas")).unwrap_or_default();
 
         let entries = std::fs::read_dir(&personas_dir)
             .map_err(|e| PromptError::Load(format!("personas dir: {e}")))?;
 
         for entry in entries {
-            let entry =
-                entry.map_err(|e| PromptError::Load(e.to_string()))?;
+            let entry = entry.map_err(|e| PromptError::Load(e.to_string()))?;
             let path = entry.path();
             if path.extension().is_some_and(|e| e == "md") {
                 let name = path
                     .file_stem()
                     .and_then(|s| s.to_str())
-                    .ok_or_else(|| {
-                        PromptError::Load("invalid filename".to_string())
-                    })?
+                    .ok_or_else(|| PromptError::Load("invalid filename".to_string()))?
                     .to_string();
 
                 let prompt_text = std::fs::read_to_string(&path)
-                    .map_err(|e| {
-                        PromptError::Load(format!("{}: {e}", path.display()))
-                    })?;
+                    .map_err(|e| PromptError::Load(format!("{}: {e}", path.display())))?;
 
-                let config_path =
-                    configs_dir.join(format!("{name}.toml"));
+                let config_path = configs_dir.join(format!("{name}.toml"));
                 let config = if config_path.exists() {
                     PersonaConfig::from_file(&config_path, prompt_text)?
                 } else {
-                    PersonaConfig::default_with_prompt(
-                        name.clone(),
-                        prompt_text,
-                    )
+                    PersonaConfig::default_with_prompt(name.clone(), prompt_text)
                 };
 
                 personas.insert(name, config);
@@ -289,9 +269,7 @@ impl PromptManager {
         Ok(personas)
     }
 
-    fn load_templates(
-        prompts_dir: &Path,
-    ) -> Result<HashMap<String, String>> {
+    fn load_templates(prompts_dir: &Path) -> Result<HashMap<String, String>> {
         let templates_dir = prompts_dir.join("templates");
         let mut templates = HashMap::new();
         if !templates_dir.exists() {
@@ -302,22 +280,17 @@ impl PromptManager {
             .map_err(|e| PromptError::Load(format!("templates dir: {e}")))?;
 
         for entry in entries {
-            let entry =
-                entry.map_err(|e| PromptError::Load(e.to_string()))?;
+            let entry = entry.map_err(|e| PromptError::Load(e.to_string()))?;
             let path = entry.path();
             if path.extension().is_some_and(|e| e == "md") {
                 let name = path
                     .file_stem()
                     .and_then(|s| s.to_str())
-                    .ok_or_else(|| {
-                        PromptError::Load("invalid filename".to_string())
-                    })?
+                    .ok_or_else(|| PromptError::Load("invalid filename".to_string()))?
                     .to_string();
 
                 let content = std::fs::read_to_string(&path)
-                    .map_err(|e| {
-                        PromptError::Load(format!("{}: {e}", path.display()))
-                    })?;
+                    .map_err(|e| PromptError::Load(format!("{}: {e}", path.display())))?;
 
                 templates.insert(name, content);
             }
@@ -378,16 +351,8 @@ mod tests {
         std::fs::create_dir_all(&personas).expect("mkdir");
         std::fs::create_dir_all(&templates).expect("mkdir");
 
-        std::fs::write(
-            personas.join("coder.md"),
-            "You are a coding assistant.",
-        )
-        .expect("write");
-        std::fs::write(
-            templates.join("tool_usage.md"),
-            "Use tools wisely.",
-        )
-        .expect("write");
+        std::fs::write(personas.join("coder.md"), "You are a coding assistant.").expect("write");
+        std::fs::write(templates.join("tool_usage.md"), "Use tools wisely.").expect("write");
 
         let manager = PromptManager::from_dir(&prompts).expect("load");
         assert!(manager.get_current_persona().is_some());

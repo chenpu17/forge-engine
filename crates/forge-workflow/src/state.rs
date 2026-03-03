@@ -38,7 +38,6 @@ pub enum WorkflowStatus {
     Cancelled,
 }
 
-
 // ============================================================================
 // ExecutionStatus
 // ============================================================================
@@ -110,10 +109,11 @@ impl NodeExecution {
     }
 
     /// 获取执行时长（毫秒）
-    #[must_use] 
+    #[must_use]
     pub fn duration_ms(&self) -> Option<u64> {
-        self.completed_at
-            .map(|end| u64::try_from((end - self.started_at).num_milliseconds().max(0)).unwrap_or(0))
+        self.completed_at.map(|end| {
+            u64::try_from((end - self.started_at).num_milliseconds().max(0)).unwrap_or(0)
+        })
     }
 }
 
@@ -146,7 +146,7 @@ impl Default for WorkflowState {
 
 impl WorkflowState {
     /// 创建新的状态
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         let now = Utc::now();
         Self {
@@ -166,7 +166,7 @@ impl WorkflowState {
     }
 
     /// 获取状态值
-    #[must_use] 
+    #[must_use]
     pub fn get(&self, key: &str) -> Option<&serde_json::Value> {
         self.data.get(key)
     }
@@ -186,7 +186,7 @@ impl WorkflowState {
     }
 
     /// 检查是否存在状态值
-    #[must_use] 
+    #[must_use]
     pub fn contains(&self, key: &str) -> bool {
         self.data.contains_key(key)
     }
@@ -209,7 +209,7 @@ impl WorkflowState {
     }
 
     /// 获取最后一次执行记录
-    #[must_use] 
+    #[must_use]
     pub fn last_execution(&self) -> Option<&NodeExecution> {
         self.history.last()
     }
@@ -220,49 +220,49 @@ impl WorkflowState {
     }
 
     /// 获取指定节点的执行记录
-    #[must_use] 
+    #[must_use]
     pub fn get_node_executions(&self, node_id: &str) -> Vec<&NodeExecution> {
         self.history.iter().filter(|e| e.node_id == node_id).collect()
     }
 
     /// 获取执行的节点数量
-    #[must_use] 
+    #[must_use]
     pub fn executed_count(&self) -> usize {
         self.history.len()
     }
 
     /// 检查工作流是否已完成
-    #[must_use] 
+    #[must_use]
     pub const fn is_completed(&self) -> bool {
         matches!(self.status, WorkflowStatus::Completed)
     }
 
     /// 检查工作流是否失败
-    #[must_use] 
+    #[must_use]
     pub const fn is_failed(&self) -> bool {
         matches!(self.status, WorkflowStatus::Failed { .. })
     }
 
     /// 检查工作流是否正在运行
-    #[must_use] 
+    #[must_use]
     pub const fn is_running(&self) -> bool {
         matches!(self.status, WorkflowStatus::Running)
     }
 
     /// 检查工作流是否等待人工输入
-    #[must_use] 
+    #[must_use]
     pub const fn is_waiting_for_human(&self) -> bool {
         matches!(self.status, WorkflowStatus::WaitingForHuman { .. })
     }
 
     /// 检查工作流是否已取消
-    #[must_use] 
+    #[must_use]
     pub const fn is_cancelled(&self) -> bool {
         matches!(self.status, WorkflowStatus::Cancelled)
     }
 
     /// 检查工作流是否已结束（完成、失败或取消）
-    #[must_use] 
+    #[must_use]
     pub const fn is_finished(&self) -> bool {
         matches!(
             self.status,

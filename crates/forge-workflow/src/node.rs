@@ -209,7 +209,6 @@ pub enum ParallelFailurePolicy {
     CollectErrors,
 }
 
-
 /// 合并策略
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -319,7 +318,7 @@ impl AgentNodeBuilder {
     }
 
     /// 设置 Agent 类型
-    #[must_use] 
+    #[must_use]
     pub const fn agent_type(mut self, agent_type: SubAgentType) -> Self {
         self.config.agent_type = agent_type;
         self
@@ -340,14 +339,14 @@ impl AgentNodeBuilder {
     }
 
     /// 设置可用工具
-    #[must_use] 
+    #[must_use]
     pub fn tools(mut self, tools: Vec<String>) -> Self {
         self.config.tools = Some(tools);
         self
     }
 
     /// 构建节点
-    #[must_use] 
+    #[must_use]
     pub fn build(self) -> Node {
         Node {
             name: self.name,
@@ -394,21 +393,21 @@ impl ToolNodeBuilder {
     }
 
     /// 设置参数模板
-    #[must_use] 
+    #[must_use]
     pub fn params(mut self, params: serde_json::Value) -> Self {
         self.config.params_template = params;
         self
     }
 
     /// 设置需要确认
-    #[must_use] 
+    #[must_use]
     pub const fn require_confirmation(mut self) -> Self {
         self.config.require_confirmation = true;
         self
     }
 
     /// 构建节点
-    #[must_use] 
+    #[must_use]
     pub fn build(self) -> Node {
         Node {
             name: self.name,
@@ -464,7 +463,7 @@ impl RouterNodeBuilder {
     }
 
     /// 构建节点
-    #[must_use] 
+    #[must_use]
     pub fn build(self) -> Node {
         Node {
             name: self.name,
@@ -519,14 +518,14 @@ impl HumanNodeBuilder {
     }
 
     /// 设置输入类型
-    #[must_use] 
+    #[must_use]
     pub const fn input_type(mut self, input_type: HumanInputType) -> Self {
         self.config.input_type = input_type;
         self
     }
 
     /// 构建节点
-    #[must_use] 
+    #[must_use]
     pub fn build(self) -> Node {
         Node {
             name: self.name,
@@ -581,28 +580,28 @@ impl ParallelNodeBuilder {
     }
 
     /// 设置合并策略
-    #[must_use] 
+    #[must_use]
     pub const fn join(mut self, strategy: JoinStrategy) -> Self {
         self.config.join_strategy = strategy;
         self
     }
 
     /// 设置失败策略
-    #[must_use] 
+    #[must_use]
     pub const fn failure_policy(mut self, policy: ParallelFailurePolicy) -> Self {
         self.config.failure_policy = policy;
         self
     }
 
     /// 设置并发限制
-    #[must_use] 
+    #[must_use]
     pub const fn concurrency_limit(mut self, limit: usize) -> Self {
         self.config.concurrency_limit = Some(limit);
         self
     }
 
     /// 构建节点
-    #[must_use] 
+    #[must_use]
     pub fn build(self) -> Node {
         Node {
             name: self.name,
@@ -663,14 +662,14 @@ impl SubWorkflowNodeBuilder {
     }
 
     /// 设置最大递归深度
-    #[must_use] 
+    #[must_use]
     pub const fn max_depth(mut self, depth: usize) -> Self {
         self.config.max_depth = Some(depth);
         self
     }
 
     /// 构建节点
-    #[must_use] 
+    #[must_use]
     pub fn build(self) -> Node {
         Node {
             name: self.name,

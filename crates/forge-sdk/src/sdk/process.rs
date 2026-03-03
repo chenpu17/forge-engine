@@ -230,7 +230,6 @@ impl ForgeSDK {
             timeout_secs: bash_timeout,
             confirmed_paths,
             bash_readonly,
-            #[cfg(feature = "lsp")]
             lsp_manager: Some(self.lsp_manager.clone()),
             ..ToolContext::default()
         }
@@ -487,7 +486,6 @@ impl ForgeSDK {
             timeout_secs: bash_timeout,
             confirmed_paths,
             bash_readonly: false,
-            #[cfg(feature = "lsp")]
             lsp_manager: Some(self.lsp_manager.clone()),
             ..ToolContext::default()
         }
@@ -669,7 +667,6 @@ impl ForgeSDK {
             timeout_secs: bash_timeout,
             confirmed_paths,
             bash_readonly,
-            #[cfg(feature = "lsp")]
             lsp_manager: Some(self.lsp_manager.clone()),
             ..ToolContext::default()
         }

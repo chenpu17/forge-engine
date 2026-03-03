@@ -122,10 +122,7 @@ impl GitOperation {
     /// Check if operation modifies the repository
     #[must_use]
     pub const fn is_write(&self) -> bool {
-        matches!(
-            self,
-            Self::Add | Self::Commit | Self::Checkout | Self::Stash
-        )
+        matches!(self, Self::Add | Self::Commit | Self::Checkout | Self::Stash)
     }
 
     /// Get the git command name

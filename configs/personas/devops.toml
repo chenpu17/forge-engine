@@ -9,3 +9,6 @@ include = ["all"]
 
 [subagents]
 enabled = ["explore", "plan", "research"]
+
+[templates]
+enabled = ["tool_usage", "git_protocol", "security"]

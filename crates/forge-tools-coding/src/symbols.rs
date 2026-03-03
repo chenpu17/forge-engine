@@ -270,10 +270,8 @@ fn resolve_search_path(
         || Ok(ctx.working_dir().to_path_buf()),
         |p| {
             let tool_ctx = ctx.as_any().downcast_ref::<forge_tools::ToolContext>();
-            let confirmed_paths = tool_ctx
-                .map(|tc| &tc.confirmed_paths)
-                .cloned()
-                .unwrap_or_default();
+            let confirmed_paths =
+                tool_ctx.map(|tc| &tc.confirmed_paths).cloned().unwrap_or_default();
             validate_path_with_confirmed(p, ctx.working_dir(), &confirmed_paths)
         },
     )
@@ -332,9 +330,8 @@ impl forge_domain::Tool for SymbolsTool {
             .transpose()
             .map_err(|e| ToolError::InvalidParams(format!("Invalid name pattern: {e}")))?;
 
-        let symbol_type = optional_str(&params, "type")
-            .and_then(SymbolType::from_str)
-            .unwrap_or(SymbolType::All);
+        let symbol_type =
+            optional_str(&params, "type").and_then(SymbolType::from_str).unwrap_or(SymbolType::All);
 
         let search_path = resolve_search_path(&params, ctx)?;
         let file_type_filter = optional_str(&params, "file_type");
@@ -426,6 +423,7 @@ impl forge_domain::Tool for SymbolsTool {
                     "line": s.line,
                 })).collect::<Vec<_>>()
             })),
+            schema_version: None,
         })
     }
 }

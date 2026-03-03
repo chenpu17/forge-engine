@@ -13,6 +13,7 @@ forge-infra.workspace = true
 forge-lsp.workspace = true
 forge-memory.workspace = true
 
+parking_lot.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 async-trait.workspace = true

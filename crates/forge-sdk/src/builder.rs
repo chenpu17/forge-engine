@@ -48,6 +48,27 @@ impl ForgeSDKBuilder {
         }
     }
 
+    /// Create a builder pre-populated with an existing [`ForgeConfig`].
+    ///
+    /// Unlike [`new`](Self::new), this preserves **all** fields in the provided
+    /// config — including `api_key`, `base_url`, `thinking`, `temperature`, and
+    /// every other setting — without requiring individual setter calls.
+    ///
+    /// Use this when you already have a fully-configured [`ForgeConfig`] and
+    /// want to pass it straight through to the SDK (e.g. from NAPI or PyO3
+    /// bindings).
+    #[must_use]
+    pub fn from_forge_config(config: ForgeConfig) -> Self {
+        Self {
+            config,
+            provider: None,
+            session_manager: None,
+            tools: Vec::new(),
+            use_builtin_tools: false,
+            memory_dir_override: None,
+        }
+    }
+
     // ---------------------------------------------------------------
     // LLM settings
     // ---------------------------------------------------------------
@@ -239,10 +260,7 @@ impl ForgeSDKBuilder {
         tool_name: impl Into<String>,
         description: impl Into<String>,
     ) -> Self {
-        self.config
-            .tools
-            .tool_descriptions
-            .insert(tool_name.into(), description.into());
+        self.config.tools.tool_descriptions.insert(tool_name.into(), description.into());
         self
     }
 
@@ -269,6 +287,10 @@ impl ForgeSDKBuilder {
     /// Validates configuration, creates the provider and session manager
     /// (if not supplied), and registers tools.
     ///
+    /// **Note:** This creates a temporary tokio runtime internally.
+    /// If you are already inside an async context, use [`build_async`](Self::build_async)
+    /// instead to avoid nested-runtime panics.
+    ///
     /// # Errors
     ///
     /// Returns [`ForgeError`](crate::ForgeError) if configuration validation
@@ -277,10 +299,7 @@ impl ForgeSDKBuilder {
         // Apply custom tool descriptions BEFORE creating tools
         Self::apply_tool_descriptions(&self.config);
 
-        let memory_dir = self
-            .memory_dir_override
-            .clone()
-            .unwrap_or_else(forge_infra::data_dir);
+        let memory_dir = self.memory_dir_override.clone().unwrap_or_else(forge_infra::data_dir);
 
         crate::ForgeSDK::from_builder(
             self.config,
@@ -290,6 +309,31 @@ impl ForgeSDKBuilder {
             self.use_builtin_tools,
             memory_dir,
         )
+    }
+
+    /// Async version of [`build`](Self::build).
+    ///
+    /// Use this when already inside a tokio runtime (e.g. from an `async fn main`
+    /// or a spawned task) to avoid the nested-runtime panic that `build()` would cause.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ForgeError`](crate::ForgeError) if configuration validation
+    /// fails, provider creation fails, or tool registration fails.
+    pub async fn build_async(self) -> Result<crate::ForgeSDK> {
+        Self::apply_tool_descriptions(&self.config);
+
+        let memory_dir = self.memory_dir_override.clone().unwrap_or_else(forge_infra::data_dir);
+
+        crate::ForgeSDK::from_builder_async(
+            self.config,
+            self.provider,
+            self.session_manager,
+            self.tools,
+            self.use_builtin_tools,
+            memory_dir,
+        )
+        .await
     }
 
     /// Apply custom tool descriptions from config.
@@ -345,14 +389,8 @@ mod tests {
         assert_eq!(builder.config.llm.model, "test-model");
         assert_eq!(builder.config.default_persona, "researcher");
         assert_eq!(builder.config.llm.max_tokens, 4096);
-        assert_eq!(
-            builder.config.llm.api_key,
-            Some("test-key".to_string())
-        );
-        assert_eq!(
-            builder.config.llm.base_url,
-            Some("https://api.example.com".to_string())
-        );
+        assert_eq!(builder.config.llm.api_key, Some("test-key".to_string()));
+        assert_eq!(builder.config.llm.base_url, Some("https://api.example.com".to_string()));
         assert!(builder.use_builtin_tools);
     }
 }

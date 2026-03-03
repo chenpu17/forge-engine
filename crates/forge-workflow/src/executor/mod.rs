@@ -312,14 +312,12 @@ async fn execute_subworkflow_detached<E: NodeExecutor>(
     config: &SubWorkflowNodeConfig,
     state: &WorkflowState,
 ) -> Result<DetachedOutcome, ExecutionError> {
-    let store = store
-        .ok_or_else(|| ExecutionError::Other("Workflow store not configured".to_string()))?;
+    let store =
+        store.ok_or_else(|| ExecutionError::Other("Workflow store not configured".to_string()))?;
 
     let max_depth = config.max_depth.unwrap_or(exec_config.max_subworkflow_depth);
     if depth >= max_depth {
-        return Err(ExecutionError::Other(format!(
-            "Subworkflow depth exceeded (max {max_depth})"
-        )));
+        return Err(ExecutionError::Other(format!("Subworkflow depth exceeded (max {max_depth})")));
     }
 
     let def = store
@@ -466,13 +464,13 @@ impl<E: NodeExecutor> WorkflowExecutor<E> {
     }
 
     /// 获取图引用
-    #[must_use] 
+    #[must_use]
     pub fn graph(&self) -> &Graph {
         &self.graph
     }
 
     /// 获取状态引用
-    #[must_use] 
+    #[must_use]
     pub const fn state(&self) -> &WorkflowState {
         &self.state
     }
@@ -488,13 +486,13 @@ impl<E: NodeExecutor> WorkflowExecutor<E> {
     }
 
     /// 获取取消令牌（用于外部取消）
-    #[must_use] 
+    #[must_use]
     pub fn cancel_token(&self) -> CancellationToken {
         self.cancel_token.clone()
     }
 
     /// 检查是否已取消
-    #[must_use] 
+    #[must_use]
     pub fn is_cancelled(&self) -> bool {
         self.cancel_token.is_cancelled()
     }
@@ -542,10 +540,8 @@ impl<E: NodeExecutor> WorkflowExecutor<E> {
             self.state.current_node = entry.to_string();
         } else {
             let error = "No entry point found in workflow graph".to_string();
-            self.state.status = WorkflowStatus::Failed {
-                error: error.clone(),
-                node: String::new(),
-            };
+            self.state.status =
+                WorkflowStatus::Failed { error: error.clone(), node: String::new() };
             sink.emit(WorkflowEvent::Failed { error, failed_node: None });
             return;
         }
@@ -613,7 +609,8 @@ impl<E: NodeExecutor> WorkflowExecutor<E> {
         if self.state.is_completed() {
             sink.emit(WorkflowEvent::Completed {
                 result: serde_json::json!(self.state.data.clone()),
-                total_duration_ms: u64::try_from(start_time.elapsed().as_millis()).unwrap_or(u64::MAX),
+                total_duration_ms: u64::try_from(start_time.elapsed().as_millis())
+                    .unwrap_or(u64::MAX),
                 nodes_executed: self.state.history.len(),
             });
         }
@@ -624,14 +621,13 @@ impl<E: NodeExecutor> WorkflowExecutor<E> {
         let node_id = self.state.current_node.clone();
 
         // 获取节点
-        let node = if let Some(n) = self.graph.get_node(&node_id) { n.clone() } else {
+        let node = if let Some(n) = self.graph.get_node(&node_id) {
+            n.clone()
+        } else {
             let error = format!("Node not found: {node_id}");
             self.state.status =
                 WorkflowStatus::Failed { error: error.clone(), node: node_id.clone() };
-            sink.emit(WorkflowEvent::Failed {
-                error,
-                failed_node: Some(node_id),
-            });
+            sink.emit(WorkflowEvent::Failed { error, failed_node: Some(node_id) });
             return;
         };
 
@@ -667,7 +663,8 @@ impl<E: NodeExecutor> WorkflowExecutor<E> {
                 sink.emit(WorkflowEvent::NodeCompleted {
                     node_id: node_id.clone(),
                     output,
-                    duration_ms: u64::try_from(node_start.elapsed().as_millis()).unwrap_or(u64::MAX),
+                    duration_ms: u64::try_from(node_start.elapsed().as_millis())
+                        .unwrap_or(u64::MAX),
                 });
 
                 // 确定下一个节点
@@ -1068,10 +1065,9 @@ impl<E: NodeExecutor> WorkflowExecutor<E> {
         }
 
         // 单条直接边，无需解释
-        if outgoing.len() == 1
-            && matches!(outgoing[0].edge_type, EdgeType::Direct) {
-                return (Some(outgoing[0].target.clone()), None);
-            }
+        if outgoing.len() == 1 && matches!(outgoing[0].edge_type, EdgeType::Direct) {
+            return (Some(outgoing[0].target.clone()), None);
+        }
 
         // 构建路由决策
         self.build_route_decision(current_node, &outgoing, router_config, default_target)
@@ -1089,11 +1085,8 @@ impl<E: NodeExecutor> WorkflowExecutor<E> {
         let expression = router_config.map_or_else(String::new, |cfg| cfg.expression.clone());
 
         // 获取路由值
-        let route_value = self
-            .state
-            .get(&format!("{current_node}_output"))
-            .and_then(|v| v.get("route"))
-            .cloned();
+        let route_value =
+            self.state.get(&format!("{current_node}_output")).and_then(|v| v.get("route")).cloned();
 
         // 构建候选分支
         let mut candidates = Vec::new();
@@ -1153,20 +1146,14 @@ impl<E: NodeExecutor> WorkflowExecutor<E> {
                 evaluated_values.insert(output_key, output.clone());
             }
 
-            let explanation = RouteExplanation {
-                expression,
-                evaluated_values,
-                candidates,
-                selected_index: idx,
-            };
+            let explanation =
+                RouteExplanation { expression, evaluated_values, candidates, selected_index: idx };
             (Some(next_node), Some(explanation))
         })
     }
 
     /// 选择路由分支
-    fn select_route(
-        candidates: &[RouteCandidate],
-    ) -> Option<usize> {
+    fn select_route(candidates: &[RouteCandidate]) -> Option<usize> {
         // 优先选择匹配的条件分支
         if let Some(idx) = candidates.iter().position(|c| c.evaluation_result && !c.is_default) {
             return Some(idx);
@@ -1215,7 +1202,9 @@ impl<E: NodeExecutor> WorkflowExecutor<E> {
 
     async fn resume_with_sink(&mut self, human_input: serde_json::Value, sink: &mut EventSink<'_>) {
         // 验证状态
-        let node_id = if let WorkflowStatus::WaitingForHuman { node, .. } = &self.state.status { node.clone() } else {
+        let node_id = if let WorkflowStatus::WaitingForHuman { node, .. } = &self.state.status {
+            node.clone()
+        } else {
             sink.emit(WorkflowEvent::Failed {
                 error: "Workflow is not waiting for human input".to_string(),
                 failed_node: None,

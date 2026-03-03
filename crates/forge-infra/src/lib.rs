@@ -40,9 +40,7 @@ pub type Result<T> = std::result::Result<T, InfraError>;
 /// Get the Forge data directory (`~/.forge`).
 #[must_use]
 pub fn data_dir() -> std::path::PathBuf {
-    dirs::home_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join(".forge")
+    dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from(".")).join(".forge")
 }
 
 /// Get the Forge config directory.
@@ -61,9 +59,8 @@ pub fn config_dir() -> std::path::PathBuf {
 /// Returns error if initialization fails.
 pub fn init() -> Result<(forge_config::ForgeConfig, ForgeDirectories)> {
     let dirs = ForgeDirectories::get_or_create()?;
-    let config = forge_config::ConfigLoader::new()
-        .load()
-        .map_err(|e| InfraError::Config(e.to_string()))?;
+    let config =
+        forge_config::ConfigLoader::new().load().map_err(|e| InfraError::Config(e.to_string()))?;
     init_logging(&config.logging)?;
     Ok((config, dirs))
 }

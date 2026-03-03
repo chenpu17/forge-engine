@@ -18,8 +18,8 @@ pub mod path_utils;
 pub mod permission_policy;
 pub mod platform;
 pub mod plugin;
-pub mod security;
 pub mod schema;
+pub mod security;
 pub mod shell_path;
 pub mod trust_permission;
 

@@ -26,7 +26,7 @@ impl Default for DefaultNodeExecutor {
 
 impl DefaultNodeExecutor {
     /// 创建新的执行器
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             template_renderer: TemplateRenderer::new(),

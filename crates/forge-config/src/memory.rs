@@ -33,11 +33,7 @@ pub struct MemorySettings {
 
 impl Default for MemorySettings {
     fn default() -> Self {
-        Self {
-            global_mode: MemoryMode::Full,
-            workspace_mode: None,
-            session_mode: None,
-        }
+        Self { global_mode: MemoryMode::Full, workspace_mode: None, session_mode: None }
     }
 }
 
@@ -45,9 +41,7 @@ impl MemorySettings {
     /// Resolve the effective mode: session > workspace > global.
     #[must_use]
     pub fn effective_mode(&self) -> MemoryMode {
-        self.session_mode
-            .or(self.workspace_mode)
-            .unwrap_or(self.global_mode)
+        self.session_mode.or(self.workspace_mode).unwrap_or(self.global_mode)
     }
 
     /// Whether reading memory is allowed in the current mode.

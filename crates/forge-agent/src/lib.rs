@@ -14,6 +14,7 @@
 
 pub mod checkpoint;
 pub mod context;
+pub mod cost_tracker;
 pub mod episodic_memory;
 pub mod executor;
 pub mod mock;
@@ -23,6 +24,8 @@ pub mod reflector;
 pub mod skill;
 pub mod skill_context;
 pub mod sub_agent;
+pub mod trace_recorder;
+pub mod trace_replayer;
 pub mod verifier;
 
 // The main agent loop is split into focused modules:
@@ -54,6 +57,9 @@ pub use project_analyzer::{Command, ProjectAnalysis, ProjectAnalyzer, ProjectTyp
 pub use reflector::{ErrorKind, RecoveryAction, ReflectionResult, Reflector};
 pub use skill_context::SkillExecutionContext;
 pub use sub_agent::{RealTaskExecutor, SubAgentConfig, SubAgentSecurity};
+pub use cost_tracker::CostTracker;
+pub use trace_recorder::TraceRecorder;
+pub use trace_replayer::{ReplayProvider, TraceDiff, diff_traces, replay_trace};
 
 /// Agent-specific errors
 #[derive(Debug, Error)]
@@ -328,6 +334,9 @@ pub struct ExperimentalAgentConfig {
     /// Enable episodic memory read/write.
     #[serde(default)]
     pub episodic_memory: bool,
+    /// Enable deterministic trace recording.
+    #[serde(default)]
+    pub trace_recording: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -403,4 +412,3 @@ impl Default for AgentConfig {
         }
     }
 }
-

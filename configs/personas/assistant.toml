@@ -8,7 +8,10 @@ system_prompt_file = "prompts/personas/assistant.md"
 include = ["all"]
 
 [subagents]
-enabled = ["explore", "plan", "research", "writer"]
+enabled = ["explore", "plan", "research", "writer", "analyst"]
+
+[templates]
+enabled = ["tool_usage", "git_protocol", "security", "error_recovery"]
 
 [options]
 is_default = true

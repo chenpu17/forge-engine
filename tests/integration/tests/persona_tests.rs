@@ -235,16 +235,10 @@ fn persona_reload_picks_up_changes() {
     let mut manager = PromptManager::from_dir(&prompts_dir).expect("load prompts");
 
     // Add a new persona file
-    std::fs::write(
-        prompts_dir.join("personas/researcher.md"),
-        "You are a research assistant.",
-    )
-    .expect("write researcher.md");
+    std::fs::write(prompts_dir.join("personas/researcher.md"), "You are a research assistant.")
+        .expect("write researcher.md");
 
     manager.reload().expect("reload prompts");
     let personas = manager.list_personas();
-    assert!(
-        personas.contains(&"researcher"),
-        "should contain newly added researcher persona"
-    );
+    assert!(personas.contains(&"researcher"), "should contain newly added researcher persona");
 }

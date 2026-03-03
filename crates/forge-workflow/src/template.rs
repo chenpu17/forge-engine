@@ -38,13 +38,13 @@ pub struct TemplateRenderer {
 
 impl TemplateRenderer {
     /// 创建新的渲染器
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// 设置严格模式
-    #[must_use] 
+    #[must_use]
     pub const fn strict(mut self, strict: bool) -> Self {
         self.strict = strict;
         self
@@ -79,7 +79,9 @@ impl TemplateRenderer {
 
         // 获取根变量
         let root = parts[0];
-        let value = if let Some(v) = state.get(root) { v.clone() } else {
+        let value = if let Some(v) = state.get(root) {
+            v.clone()
+        } else {
             if self.strict {
                 return Err(TemplateError::VariableNotFound(root.to_string()));
             }

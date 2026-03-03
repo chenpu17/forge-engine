@@ -4,8 +4,9 @@
 
 use crate::context;
 use crate::stream::process_llm_stream;
+use crate::trace_recorder::TraceRecorder;
 use crate::{AgentConfig, AgentError, Result};
-use forge_domain::AgentEvent;
+use forge_domain::{AgentEvent, Usage};
 use forge_llm::{ChatMessage, LlmConfig, LlmProvider};
 use std::future::Future;
 use std::sync::Arc;
@@ -26,6 +27,8 @@ pub struct PreToolStageOutput {
     pub full_text: String,
     /// Parsed tool calls from the LLM response.
     pub tool_calls: Vec<forge_domain::ToolCall>,
+    /// Token usage from the LLM response (for cost tracking).
+    pub usage: Option<Usage>,
 }
 
 /// Named stages of the agent loop, used for structured logging.
@@ -57,11 +60,7 @@ impl AgentLoopStage {
 // ---------------------------------------------------------------------------
 
 /// Run a named stage with structured timing logs.
-pub async fn run_stage<T, Fut>(
-    iteration: usize,
-    stage: AgentLoopStage,
-    fut: Fut,
-) -> T
+pub async fn run_stage<T, Fut>(iteration: usize, stage: AgentLoopStage, fut: Fut) -> T
 where
     Fut: Future<Output = T>,
 {
@@ -119,9 +118,7 @@ pub async fn prepare_iteration_messages(
     // trimming becomes frequent.
     let warning_threshold = available / 5 * 4;
     if current_tokens > warning_threshold {
-        let _ = tx
-            .send(Ok(AgentEvent::ContextWarning { current_tokens, limit: available }))
-            .await;
+        let _ = tx.send(Ok(AgentEvent::ContextWarning { current_tokens, limit: available })).await;
     }
 
     let trimmed_messages =
@@ -162,6 +159,7 @@ pub async fn run_pre_tool_stages(
     tx: &mpsc::Sender<Result<AgentEvent>>,
     cancellation: &CancellationToken,
     context_recovery_attempts: &mut usize,
+    trace_recorder: Option<&mut TraceRecorder>,
 ) -> Result<PreToolStageOutput> {
     // Stage 1: token accounting + context trim
     let trimmed_messages = run_stage(
@@ -230,14 +228,14 @@ pub async fn run_pre_tool_stages(
     .await?;
 
     // Stage 3: stream event processing
-    let (full_text, tool_calls) = run_stage(
+    let (full_text, tool_calls, usage) = run_stage(
         iteration,
         AgentLoopStage::ProcessLlmStream,
-        process_llm_stream(stream, tx, cancellation, config.experimental.streaming_tools),
+        process_llm_stream(stream, tx, cancellation, config.experimental.streaming_tools, trace_recorder),
     )
     .await?;
 
-    Ok(PreToolStageOutput { full_text, tool_calls })
+    Ok(PreToolStageOutput { full_text, tool_calls, usage })
 }
 
 // ---------------------------------------------------------------------------

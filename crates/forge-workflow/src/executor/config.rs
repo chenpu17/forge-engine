@@ -34,34 +34,34 @@ impl Default for ExecutorConfig {
 
 impl ExecutorConfig {
     /// 创建新的配置
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// 设置最大迭代次数
-    #[must_use] 
+    #[must_use]
     pub const fn max_iterations(mut self, max: usize) -> Self {
         self.max_iterations = max;
         self
     }
 
     /// 设置节点超时
-    #[must_use] 
+    #[must_use]
     pub const fn node_timeout(mut self, secs: u64) -> Self {
         self.node_timeout_secs = secs;
         self
     }
 
     /// 设置总超时
-    #[must_use] 
+    #[must_use]
     pub const fn total_timeout(mut self, secs: u64) -> Self {
         self.total_timeout_secs = secs;
         self
     }
 
     /// 启用检查点
-    #[must_use] 
+    #[must_use]
     pub const fn with_checkpoints(mut self, interval: usize) -> Self {
         self.enable_checkpoints = true;
         self.checkpoint_interval = interval;
@@ -69,7 +69,7 @@ impl ExecutorConfig {
     }
 
     /// 禁用检查点
-    #[must_use] 
+    #[must_use]
     pub const fn without_checkpoints(mut self) -> Self {
         self.enable_checkpoints = false;
         self

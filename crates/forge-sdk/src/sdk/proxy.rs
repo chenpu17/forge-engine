@@ -28,11 +28,7 @@ impl ForgeSDK {
     /// # Errors
     ///
     /// Returns error if name is not "global" or persistence fails.
-    pub async fn set_proxy(
-        &self,
-        name: &str,
-        config: forge_config::ProxyConfig,
-    ) -> Result<()> {
+    pub async fn set_proxy(&self, name: &str, config: forge_config::ProxyConfig) -> Result<()> {
         if name != "global" {
             return Err(ForgeError::ConfigError(format!(
                 "Only 'global' proxy is supported. Got: '{name}'"
@@ -76,10 +72,7 @@ impl ForgeSDK {
     /// # Errors
     ///
     /// Returns error if persistence fails.
-    pub async fn set_global_proxy_config(
-        &self,
-        proxy: forge_config::ProxyConfig,
-    ) -> Result<()> {
+    pub async fn set_global_proxy_config(&self, proxy: forge_config::ProxyConfig) -> Result<()> {
         self.set_proxy("global", proxy).await
     }
 

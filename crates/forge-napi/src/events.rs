@@ -98,16 +98,41 @@ impl JsAgentEvent {
     fn new(event_type: &str) -> Self {
         Self {
             event_type: event_type.to_string(),
-            session_id: None, request_id: None, content: None, delta: None,
-            id: None, name: None, input: None, output: None, is_error: None,
-            input_tokens: None, output_tokens: None,
-            cache_read_tokens: None, cache_creation_tokens: None,
-            action: None, suggestion: None, tool: None, params: None, level: None,
-            task: None, todos: None, summary: None, message: None,
-            current_tokens: None, limit: None,
-            messages_before: None, messages_after: None, tokens_saved: None,
-            task_type: None, description: None, exit_code: None, success: None,
-            plan_file: None, saved: None, attempt: None, max_attempts: None,
+            session_id: None,
+            request_id: None,
+            content: None,
+            delta: None,
+            id: None,
+            name: None,
+            input: None,
+            output: None,
+            is_error: None,
+            input_tokens: None,
+            output_tokens: None,
+            cache_read_tokens: None,
+            cache_creation_tokens: None,
+            action: None,
+            suggestion: None,
+            tool: None,
+            params: None,
+            level: None,
+            task: None,
+            todos: None,
+            summary: None,
+            message: None,
+            current_tokens: None,
+            limit: None,
+            messages_before: None,
+            messages_after: None,
+            tokens_saved: None,
+            task_type: None,
+            description: None,
+            exit_code: None,
+            success: None,
+            plan_file: None,
+            saved: None,
+            attempt: None,
+            max_attempts: None,
             trace_id: None,
         }
     }
@@ -154,14 +179,18 @@ impl From<forge_sdk::AgentEvent> for JsAgentEvent {
                 e
             }
             forge_sdk::AgentEvent::TokenUsage {
-                input_tokens, output_tokens,
-                cache_read_tokens, cache_creation_tokens,
+                input_tokens,
+                output_tokens,
+                cache_read_tokens,
+                cache_creation_tokens,
             } => {
                 let mut e = Self::new("TokenUsage");
                 e.input_tokens = Some(u32::try_from(input_tokens).unwrap_or(u32::MAX));
                 e.output_tokens = Some(u32::try_from(output_tokens).unwrap_or(u32::MAX));
-                e.cache_read_tokens = cache_read_tokens.map(|t| u32::try_from(t).unwrap_or(u32::MAX));
-                e.cache_creation_tokens = cache_creation_tokens.map(|t| u32::try_from(t).unwrap_or(u32::MAX));
+                e.cache_read_tokens =
+                    cache_read_tokens.map(|t| u32::try_from(t).unwrap_or(u32::MAX));
+                e.cache_creation_tokens =
+                    cache_creation_tokens.map(|t| u32::try_from(t).unwrap_or(u32::MAX));
                 e
             }
             forge_sdk::AgentEvent::Recovery { action, suggestion } => {
@@ -196,10 +225,12 @@ impl From<forge_sdk::AgentEvent> for JsAgentEvent {
             }
             forge_sdk::AgentEvent::TodoUpdate { todos } => {
                 let mut e = Self::new("TodoUpdate");
-                e.todos = Some(todos.into_iter().map(|t| JsTodoItem {
-                    task: t.content,
-                    status: format!("{:?}", t.status),
-                }).collect());
+                e.todos = Some(
+                    todos
+                        .into_iter()
+                        .map(|t| JsTodoItem { task: t.content, status: format!("{:?}", t.status) })
+                        .collect(),
+                );
                 e
             }
             forge_sdk::AgentEvent::ContextWarning { current_tokens, limit } => {
@@ -209,7 +240,9 @@ impl From<forge_sdk::AgentEvent> for JsAgentEvent {
                 e
             }
             forge_sdk::AgentEvent::ContextCompressed {
-                messages_before, messages_after, tokens_saved,
+                messages_before,
+                messages_after,
+                tokens_saved,
             } => {
                 let mut e = Self::new("ContextCompressed");
                 e.messages_before = Some(u32::try_from(messages_before).unwrap_or(u32::MAX));
@@ -274,6 +307,33 @@ impl From<forge_sdk::AgentEvent> for JsAgentEvent {
                 let mut e = Self::new("RolledBack");
                 e.message = Some(reason);
                 e.messages_after = Some(u32::try_from(files_restored).unwrap_or(u32::MAX));
+                e
+            }
+            forge_sdk::AgentEvent::CostUpdate { agent_id, estimated_cost_usd, .. } => {
+                let mut e = Self::new("CostUpdate");
+                e.id = Some(agent_id);
+                e.content = Some(format!("{estimated_cost_usd:.6}"));
+                e
+            }
+            forge_sdk::AgentEvent::CostWarning { agent_id, current_usd, limit_usd, percentage } => {
+                let mut e = Self::new("CostWarning");
+                e.id = Some(agent_id);
+                e.message = Some(format!(
+                    "Cost warning: ${current_usd:.4}/${limit_usd:.4} ({percentage:.0}%)"
+                ));
+                e
+            }
+            forge_sdk::AgentEvent::BudgetExceeded { agent_id, current_usd, limit_usd } => {
+                let mut e = Self::new("BudgetExceeded");
+                e.id = Some(agent_id);
+                e.message = Some(format!(
+                    "Budget exceeded: ${current_usd:.4} > ${limit_usd:.4}"
+                ));
+                e
+            }
+            forge_sdk::AgentEvent::TraceRecorded { trace_id } => {
+                let mut e = Self::new("TraceRecorded");
+                e.id = Some(trace_id);
                 e
             }
         }

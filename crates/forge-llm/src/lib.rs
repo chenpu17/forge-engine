@@ -317,10 +317,7 @@ pub trait LlmProvider: Send + Sync {
 
     /// Get context limit for a model
     fn context_limit(&self, model: &str) -> usize {
-        self.supported_models()
-            .iter()
-            .find(|m| m.id == model)
-            .map_or(200_000, |m| m.context_window)
+        self.supported_models().iter().find(|m| m.id == model).map_or(200_000, |m| m.context_window)
     }
 
     /// Estimate token count for text

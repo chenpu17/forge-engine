@@ -12,4 +12,4 @@ extensions = ["forge-tools-coding"]
 enabled = ["explore", "plan", "research", "general", "writer", "analyst"]
 
 [templates]
-enabled = ["tool_usage", "git_protocol"]
+enabled = ["tool_usage", "git_protocol", "security", "error_recovery"]

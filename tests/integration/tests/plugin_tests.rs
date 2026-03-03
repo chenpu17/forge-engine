@@ -39,10 +39,7 @@ impl Tool for EchoTool {
         params: Value,
         _ctx: &dyn forge_domain::ToolExecutionContext,
     ) -> Result<ToolOutput, forge_domain::ToolError> {
-        let message = params
-            .get("message")
-            .and_then(|v| v.as_str())
-            .unwrap_or("(empty)");
+        let message = params.get("message").and_then(|v| v.as_str()).unwrap_or("(empty)");
         Ok(ToolOutput::success(format!("Echo: {message}")))
     }
 
@@ -82,10 +79,7 @@ impl Tool for CounterTool {
         params: Value,
         _ctx: &dyn forge_domain::ToolExecutionContext,
     ) -> Result<ToolOutput, forge_domain::ToolError> {
-        let count = params
-            .get("count")
-            .and_then(|v| v.as_i64())
-            .unwrap_or(0);
+        let count = params.get("count").and_then(|v| v.as_i64()).unwrap_or(0);
         Ok(ToolOutput::success(format!("Count: {count}")))
     }
 }
@@ -178,10 +172,7 @@ async fn sdk_register_custom_tool() {
     sdk.register_tool(Arc::new(EchoTool)).await;
 
     let tools = sdk.list_tools().await;
-    assert!(
-        tools.contains(&"echo_test".to_string()),
-        "registered tool should appear in list"
-    );
+    assert!(tools.contains(&"echo_test".to_string()), "registered tool should appear in list");
 }
 
 #[tokio::test]
@@ -276,12 +267,7 @@ async fn sdk_disable_tool() {
     assert!(!disabled.contains(&"read".to_string()));
 
     // After disabling, the snapshot should exclude it
-    sdk.set_disabled_tools(vec!["read".to_string()])
-        .await
-        .expect("disable tool");
+    sdk.set_disabled_tools(vec!["read".to_string()]).await;
     let snapshot = sdk.tool_registry_snapshot().await;
-    assert!(
-        snapshot.get("read").is_none(),
-        "disabled tool should not appear in snapshot"
-    );
+    assert!(snapshot.get("read").is_none(), "disabled tool should not appear in snapshot");
 }

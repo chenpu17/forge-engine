@@ -29,7 +29,7 @@
 - Prefer specific tools over bash when available:
   - Use `read` instead of `cat`
   - Use `glob` instead of `find`
-  - Use `grep` instead of `grep` command
+  - Use the `grep` tool instead of shell `grep` command
   - Use `edit` instead of `sed`
 - Check command output for errors before proceeding
 

@@ -18,6 +18,8 @@ pub struct JsToolInfo {
     pub category: String,
     /// Whether this tool requires network access.
     pub requires_network: bool,
+    /// Named proxy for this tool (None = direct connection).
+    pub proxy_name: Option<String>,
 }
 
 impl From<forge_sdk::ToolInfo> for JsToolInfo {
@@ -39,7 +41,101 @@ impl From<forge_sdk::ToolInfo> for JsToolInfo {
             disabled: info.disabled,
             category: category.to_string(),
             requires_network: info.requires_network,
+            proxy_name: None,
         }
+    }
+}
+
+/// Proxy authentication configuration.
+#[napi(object)]
+#[derive(Clone, Debug)]
+pub struct JsProxyAuthConfig {
+    /// Proxy username.
+    pub username: Option<String>,
+    /// Whether password is stored in keychain.
+    pub password_from_keychain: bool,
+}
+
+/// Proxy configuration.
+#[napi(object)]
+#[derive(Clone, Debug)]
+pub struct JsProxyConfig {
+    /// Proxy mode: "none" | "system" | "environment" | "manual".
+    pub mode: String,
+    /// HTTP proxy URL.
+    pub http_url: Option<String>,
+    /// HTTPS proxy URL.
+    pub https_url: Option<String>,
+    /// Proxy authentication.
+    pub auth: Option<JsProxyAuthConfig>,
+    /// Addresses that bypass the proxy.
+    pub no_proxy: Vec<String>,
+    /// Disable TLS certificate validation (insecure).
+    pub danger_accept_invalid_certs: bool,
+}
+
+impl From<forge_config::ProxyConfig> for JsProxyConfig {
+    fn from(config: forge_config::ProxyConfig) -> Self {
+        Self {
+            mode: match config.mode {
+                forge_config::ProxyMode::None => "none",
+                forge_config::ProxyMode::System => "system",
+                forge_config::ProxyMode::Environment => "environment",
+                forge_config::ProxyMode::Manual => "manual",
+            }
+            .to_string(),
+            http_url: config.http_url,
+            https_url: config.https_url,
+            auth: config.auth.map(|a| JsProxyAuthConfig {
+                username: Some(a.username),
+                password_from_keychain: a.password_from_keychain,
+            }),
+            no_proxy: config.no_proxy,
+            danger_accept_invalid_certs: config.danger_accept_invalid_certs,
+        }
+    }
+}
+
+impl From<JsProxyConfig> for forge_config::ProxyConfig {
+    fn from(config: JsProxyConfig) -> Self {
+        let mode = match config.mode.to_lowercase().as_str() {
+            "system" => forge_config::ProxyMode::System,
+            "environment" | "env" => forge_config::ProxyMode::Environment,
+            "manual" => forge_config::ProxyMode::Manual,
+            _ => forge_config::ProxyMode::None,
+        };
+        Self {
+            mode,
+            http_url: config.http_url,
+            https_url: config.https_url,
+            auth: config.auth.and_then(|a| {
+                a.username.map(|username| forge_config::ProxyAuth {
+                    username,
+                    password: None,
+                    password_env: None,
+                    password_from_keychain: a.password_from_keychain,
+                    password_keychain_key: None,
+                })
+            }),
+            no_proxy: config.no_proxy,
+            danger_accept_invalid_certs: config.danger_accept_invalid_certs,
+        }
+    }
+}
+
+/// Named proxy entry.
+#[napi(object)]
+#[derive(Clone, Debug)]
+pub struct JsProxyInfo {
+    /// Proxy name.
+    pub name: String,
+    /// Proxy configuration.
+    pub config: JsProxyConfig,
+}
+
+impl From<forge_sdk::ProxyInfo> for JsProxyInfo {
+    fn from(info: forge_sdk::ProxyInfo) -> Self {
+        Self { name: info.name, config: info.config.into() }
     }
 }
 

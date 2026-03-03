@@ -487,9 +487,9 @@ fn validate_write_path_inner(
     })?;
 
     // Get the parent directory — crucial for symlink protection
-    let parent_dir = resolved_path.parent().ok_or_else(|| {
-        ToolError::PermissionDenied(format!("Invalid path (no parent): {path}"))
-    })?;
+    let parent_dir = resolved_path
+        .parent()
+        .ok_or_else(|| ToolError::PermissionDenied(format!("Invalid path (no parent): {path}")))?;
 
     // Canonicalize the parent directory to resolve symlinks.
     // For write operations the parent may not exist yet, so we walk up to the

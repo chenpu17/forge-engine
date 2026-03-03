@@ -128,11 +128,7 @@ impl SkillExecutionContext {
         self.allowed_tools.as_ref().map_or_else(
             || tools.to_vec(),
             |allowed| {
-                tools
-                    .iter()
-                    .filter(|t| allowed.contains(&t.to_lowercase()))
-                    .cloned()
-                    .collect()
+                tools.iter().filter(|t| allowed.contains(&t.to_lowercase())).cloned().collect()
             },
         )
     }

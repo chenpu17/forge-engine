@@ -29,7 +29,64 @@ use async_trait::async_trait;
 use forge_domain::Tool;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::{Arc, OnceLock};
+
+/// Build a client safely — falls back to `.no_proxy()` on failure
+/// (avoids the `Client::new()` panic on macOS when system proxy query fails).
+///
+/// `rebuild` is called to produce a fresh builder with the provider's
+/// original settings (UA, timeout, etc.) so the fallback path stays consistent.
+fn safe_build_client<F>(builder: reqwest::ClientBuilder, rebuild: F) -> reqwest::Client
+where
+    F: FnOnce() -> reqwest::ClientBuilder,
+{
+    let primary = catch_unwind(AssertUnwindSafe(|| builder.build()));
+    if let Ok(Ok(client)) = primary {
+        return client;
+    }
+    match primary {
+        Ok(Err(e)) => tracing::warn!("HTTP client build failed ({e}), retrying with no_proxy"),
+        Err(_) => tracing::warn!("HTTP client build panicked, retrying with no_proxy"),
+        Ok(Ok(_)) => {}
+    }
+
+    let fallback = catch_unwind(AssertUnwindSafe(|| rebuild().no_proxy().build()));
+    match fallback {
+        Ok(Ok(client)) => client,
+        Ok(Err(e)) => {
+            tracing::error!(
+                "no_proxy client build also failed ({e}); \
+                 this usually means the TLS backend is broken"
+            );
+            panic!("Cannot create any HTTP client: {e}");
+        }
+        Err(_) => {
+            tracing::error!("no_proxy client build panicked");
+            panic!("Cannot create any HTTP client: no_proxy builder panicked");
+        }
+    }
+}
+
+/// Build a client with proxy config, falling back safely on error.
+///
+/// `rebuild` produces a fresh builder with the provider's original settings.
+fn build_client_with_proxy<F>(
+    builder: reqwest::ClientBuilder,
+    proxy: &forge_config::ProxyConfig,
+    rebuild: F,
+) -> reqwest::Client
+where
+    F: FnOnce() -> reqwest::ClientBuilder,
+{
+    match forge_infra::http::configure_http_client_builder(builder, Some(proxy)) {
+        Ok(b) => safe_build_client(b, rebuild),
+        Err(e) => {
+            tracing::warn!("Proxy configuration failed ({e}), using direct connection");
+            safe_build_client(rebuild().no_proxy(), reqwest::Client::builder)
+        }
+    }
+}
 
 /// Search result item
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -119,15 +176,24 @@ pub struct ExaSearchProvider {
 }
 
 impl ExaSearchProvider {
-    /// Create a new Exa AI search provider
-    #[must_use]
-    pub fn new() -> Self {
-        let client = reqwest::Client::builder()
+    /// Base builder with Exa defaults.
+    fn base_builder() -> reqwest::ClientBuilder {
+        reqwest::Client::builder()
             .user_agent("Forge/1.0")
             .timeout(std::time::Duration::from_secs(25))
-            .build()
-            .unwrap_or_else(|_| reqwest::Client::new());
+    }
 
+    /// Create a new Exa AI search provider (safe fallback, no proxy)
+    #[must_use]
+    pub fn new() -> Self {
+        let client = safe_build_client(Self::base_builder(), Self::base_builder);
+        Self { client }
+    }
+
+    /// Create with proxy configuration
+    #[must_use]
+    pub fn with_proxy(proxy: &forge_config::ProxyConfig) -> Self {
+        let client = build_client_with_proxy(Self::base_builder(), proxy, Self::base_builder);
         Self { client }
     }
 }
@@ -245,29 +311,33 @@ pub struct BraveSearchProvider {
 }
 
 impl BraveSearchProvider {
-    /// Create a new Brave Search provider
+    /// Base builder with Brave defaults.
+    fn base_builder() -> reqwest::ClientBuilder {
+        reqwest::Client::builder()
+            .user_agent("Forge/1.0")
+            .timeout(std::time::Duration::from_secs(30))
+    }
+
+    /// Create a new Brave Search provider (safe fallback, no proxy)
     #[must_use]
     pub fn new() -> Self {
         let api_key = std::env::var("BRAVE_SEARCH_API_KEY").ok();
+        let client = safe_build_client(Self::base_builder(), Self::base_builder);
+        Self { client, api_key }
+    }
 
-        let client = reqwest::Client::builder()
-            .user_agent("Forge/1.0")
-            .timeout(std::time::Duration::from_secs(30))
-            .build()
-            .unwrap_or_else(|_| reqwest::Client::new());
-
+    /// Create with proxy configuration
+    #[must_use]
+    pub fn with_proxy(proxy: &forge_config::ProxyConfig) -> Self {
+        let api_key = std::env::var("BRAVE_SEARCH_API_KEY").ok();
+        let client = build_client_with_proxy(Self::base_builder(), proxy, Self::base_builder);
         Self { client, api_key }
     }
 
     /// Create with explicit API key
     #[must_use]
     pub fn with_api_key(api_key: impl Into<String>) -> Self {
-        let client = reqwest::Client::builder()
-            .user_agent("Forge/1.0")
-            .timeout(std::time::Duration::from_secs(30))
-            .build()
-            .unwrap_or_else(|_| reqwest::Client::new());
-
+        let client = safe_build_client(Self::base_builder(), Self::base_builder);
         Self { client, api_key: Some(api_key.into()) }
     }
 }
@@ -371,15 +441,24 @@ pub struct DuckDuckGoProvider {
 }
 
 impl DuckDuckGoProvider {
-    /// Create a new `DuckDuckGo` provider
-    #[must_use]
-    pub fn new() -> Self {
-        let client = reqwest::Client::builder()
+    /// Base builder with DuckDuckGo defaults (browser-like UA to avoid bot detection).
+    fn base_builder() -> reqwest::ClientBuilder {
+        reqwest::Client::builder()
             .user_agent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
             .timeout(std::time::Duration::from_secs(30))
-            .build()
-            .unwrap_or_else(|_| reqwest::Client::new());
+    }
 
+    /// Create a new `DuckDuckGo` provider (safe fallback, no proxy)
+    #[must_use]
+    pub fn new() -> Self {
+        let client = safe_build_client(Self::base_builder(), Self::base_builder);
+        Self { client }
+    }
+
+    /// Create with proxy configuration
+    #[must_use]
+    pub fn with_proxy(proxy: &forge_config::ProxyConfig) -> Self {
+        let client = build_client_with_proxy(Self::base_builder(), proxy, Self::base_builder);
         Self { client }
     }
 }
@@ -665,24 +744,73 @@ impl WebSearchTool {
         }
     }
 
-    /// Create from environment configuration
-    ///
-    /// Checks `FORGE_SEARCH_PROVIDER` environment variable:
-    /// - `exa` (default): Exa AI search
-    /// - `brave`: Brave Search (requires `BRAVE_SEARCH_API_KEY`)
-    /// - `duckduckgo`: `DuckDuckGo` HTML search
+    /// Create with specified provider type and proxy configuration
     #[must_use]
-    pub fn from_env() -> Self {
-        if let Ok(provider) = std::env::var("FORGE_SEARCH_PROVIDER") {
-            if let Some(provider_type) = SearchProviderType::from_str(&provider) {
-                tracing::info!("Using search provider from env: {}", provider_type.name());
-                return Self::with_provider_type(provider_type);
+    pub fn with_provider_type_and_proxy(
+        provider_type: SearchProviderType,
+        proxy: &forge_config::ProxyConfig,
+    ) -> Self {
+        match provider_type {
+            SearchProviderType::Exa => Self::new(Arc::new(ExaSearchProvider::with_proxy(proxy))),
+            SearchProviderType::Brave => {
+                Self::new(Arc::new(BraveSearchProvider::with_proxy(proxy)))
             }
-            tracing::warn!("Unknown search provider '{}', using default (exa)", provider);
+            SearchProviderType::DuckDuckGo => {
+                Self::new(Arc::new(DuckDuckGoProvider::with_proxy(proxy)))
+            }
+            SearchProviderType::Mock => Self::with_mock(),
+        }
+    }
+
+    /// Resolve provider selection with precedence:
+    /// 1) explicit setting
+    /// 2) `FORGE_SEARCH_PROVIDER` env
+    /// 3) default (`exa`)
+    fn resolve_provider_type(explicit_provider: Option<&str>) -> SearchProviderType {
+        if let Some(provider) = explicit_provider {
+            if let Some(provider_type) = SearchProviderType::from_str(provider) {
+                return provider_type;
+            }
+            tracing::warn!("Unknown configured search provider '{provider}', falling back");
         }
 
-        // Default to Exa AI
-        Self::with_exa()
+        std::env::var("FORGE_SEARCH_PROVIDER")
+            .ok()
+            .and_then(|p| {
+                SearchProviderType::from_str(&p).or_else(|| {
+                    tracing::warn!("Unknown search provider '{p}', using default (exa)");
+                    None
+                })
+            })
+            .unwrap_or_default()
+    }
+
+    /// Create from explicit settings with optional proxy.
+    #[must_use]
+    pub fn from_settings(
+        provider: Option<&str>,
+        proxy: Option<&forge_config::ProxyConfig>,
+    ) -> Self {
+        let provider_type = Self::resolve_provider_type(provider);
+        tracing::info!("Using search provider: {}", provider_type.name());
+
+        if let Some(proxy) = proxy {
+            Self::with_provider_type_and_proxy(provider_type, proxy)
+        } else {
+            Self::with_provider_type(provider_type)
+        }
+    }
+
+    /// Create from environment configuration.
+    #[must_use]
+    pub fn from_env() -> Self {
+        Self::from_settings(None, None)
+    }
+
+    /// Create from environment configuration with optional proxy.
+    #[must_use]
+    pub fn from_env_with_proxy(proxy: Option<&forge_config::ProxyConfig>) -> Self {
+        Self::from_settings(None, proxy)
     }
 }
 
@@ -735,11 +863,7 @@ impl Tool for WebSearchTool {
 
     fn retry_config(&self) -> RetryConfig {
         // Keep retries limited to avoid long hangs in restricted networks.
-        RetryConfig {
-            max_retries: 1,
-            initial_delay_ms: 1000,
-            exponential_backoff: true,
-        }
+        RetryConfig { max_retries: 1, initial_delay_ms: 1000, exponential_backoff: true }
     }
 
     fn is_readonly(&self) -> bool {

@@ -71,22 +71,20 @@ impl Tool for EnterPlanModeTool {
         }
 
         // Get plan file path
-        let plan_file = crate::optional_str(&params, "plan_file")
-            .map_or_else(
-                || {
-                    // Generate default plan file path
-                    let plans_dir = dirs::home_dir()
-                        .map_or_else(
-                            || std::path::PathBuf::from("/tmp/.forge/plans"),
-                            |h| h.join(".forge/plans"),
-                        );
+        let plan_file = crate::optional_str(&params, "plan_file").map_or_else(
+            || {
+                // Generate default plan file path
+                let plans_dir = dirs::home_dir().map_or_else(
+                    || std::path::PathBuf::from("/tmp/.forge/plans"),
+                    |h| h.join(".forge/plans"),
+                );
 
-                    let timestamp = chrono::Utc::now().format("%Y%m%d-%H%M%S");
-                    let id = &uuid::Uuid::new_v4().to_string()[..8];
-                    plans_dir.join(format!("plan-{timestamp}-{id}.md"))
-                },
-                std::path::PathBuf::from,
-            );
+                let timestamp = chrono::Utc::now().format("%Y%m%d-%H%M%S");
+                let id = &uuid::Uuid::new_v4().to_string()[..8];
+                plans_dir.join(format!("plan-{timestamp}-{id}.md"))
+            },
+            std::path::PathBuf::from,
+        );
 
         // Ensure plans directory exists
         if let Some(parent) = plan_file.parent() {

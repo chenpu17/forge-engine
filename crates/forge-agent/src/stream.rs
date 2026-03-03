@@ -3,12 +3,14 @@
 //! Collects text deltas and tool calls from the LLM response stream.
 
 use crate::{AgentError, Result};
-use forge_domain::{AgentEvent, ToolCall};
+use forge_domain::{AgentEvent, ToolCall, Usage};
 use forge_llm::LlmEvent;
 use futures::StreamExt;
 use std::collections::HashMap;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
+
+use crate::trace_recorder::TraceRecorder;
 
 // ---------------------------------------------------------------------------
 // Streaming tool assembler
@@ -82,11 +84,13 @@ pub async fn process_llm_stream(
     tx: &mpsc::Sender<Result<AgentEvent>>,
     cancellation: &CancellationToken,
     enable_streaming_tool_assembly: bool,
-) -> Result<(String, Vec<ToolCall>)> {
+    mut trace_recorder: Option<&mut TraceRecorder>,
+) -> Result<(String, Vec<ToolCall>, Option<Usage>)> {
     let mut full_text = String::new();
     let mut tool_calls: Vec<ToolCall> = Vec::new();
     let mut tool_names: HashMap<String, String> = HashMap::new();
     let mut assembler = enable_streaming_tool_assembly.then(ToolStreamAssembler::default);
+    let mut last_usage: Option<Usage> = None;
 
     while let Some(event_result) = stream.next().await {
         if cancellation.is_cancelled() {
@@ -95,68 +99,82 @@ pub async fn process_llm_stream(
         }
 
         match event_result {
-            Ok(LlmEvent::TextDelta(delta)) => {
-                full_text.push_str(&delta);
-                let _ = tx.send(Ok(AgentEvent::TextDelta { delta })).await;
-            }
-            Ok(LlmEvent::ToolUseStart { id, name }) => {
-                tool_names.insert(id.clone(), name.clone());
-                if let Some(a) = assembler.as_mut() {
-                    a.on_start(&id, &name);
+            Ok(ref event) => {
+                // Record to trace if enabled
+                if let Some(ref mut rec) = trace_recorder {
+                    rec.record_llm_event(event);
                 }
-                let _ = tx
-                    .send(Ok(AgentEvent::ToolCallStart {
-                        id,
-                        name,
-                        input: serde_json::Value::Null,
-                    }))
-                    .await;
-            }
-            Ok(LlmEvent::ToolUseInputDelta { id, delta }) => {
-                if let Some(a) = assembler.as_mut() {
-                    a.on_input_delta(&id, &delta);
-                }
-            }
-            Ok(LlmEvent::ThinkingStart) => {
-                let _ = tx.send(Ok(AgentEvent::ThinkingStart)).await;
-            }
-            Ok(LlmEvent::ThinkingDelta(content)) => {
-                let _ = tx.send(Ok(AgentEvent::Thinking { content })).await;
-            }
-            Ok(LlmEvent::ThinkingEnd) => {}
-            Ok(LlmEvent::ToolUseEnd { id, name, input }) => {
-                if let Some(a) = assembler.as_mut() {
-                    if let Some(call) = a.on_end(id.clone(), name.clone(), input.clone()) {
-                        tool_names.remove(&id);
-                        tool_calls.push(call);
+                match event {
+                    LlmEvent::TextDelta(delta) => {
+                        full_text.push_str(delta);
+                        let _ = tx.send(Ok(AgentEvent::TextDelta { delta: delta.clone() })).await;
                     }
-                } else {
-                    let tool_name = if name.is_empty() {
-                        tool_names.remove(&id).unwrap_or_default()
-                    } else {
-                        tool_names.remove(&id);
-                        name
-                    };
-                    if tool_name.is_empty() {
-                        tracing::warn!(id = %id, "LLM returned tool call with empty name, skipping");
-                        continue;
+                    LlmEvent::ToolUseStart { id, name } => {
+                        tool_names.insert(id.clone(), name.clone());
+                        if let Some(a) = assembler.as_mut() {
+                            a.on_start(id, name);
+                        }
+                        let _ = tx
+                            .send(Ok(AgentEvent::ToolCallStart {
+                                id: id.clone(),
+                                name: name.clone(),
+                                input: serde_json::Value::Null,
+                            }))
+                            .await;
                     }
-                    tool_calls.push(ToolCall { id: id.clone(), name: tool_name, input });
+                    LlmEvent::ToolUseInputDelta { id, delta } => {
+                        if let Some(a) = assembler.as_mut() {
+                            a.on_input_delta(id, delta);
+                        }
+                    }
+                    LlmEvent::ThinkingStart => {
+                        let _ = tx.send(Ok(AgentEvent::ThinkingStart)).await;
+                    }
+                    LlmEvent::ThinkingDelta(content) => {
+                        let _ = tx.send(Ok(AgentEvent::Thinking { content: content.clone() })).await;
+                    }
+                    LlmEvent::ThinkingEnd => {}
+                    LlmEvent::ToolUseEnd { id, name, input } => {
+                        if let Some(a) = assembler.as_mut() {
+                            if let Some(call) = a.on_end(id.clone(), name.clone(), input.clone()) {
+                                tool_names.remove(id);
+                                tool_calls.push(call);
+                            }
+                        } else {
+                            let tool_name = if name.is_empty() {
+                                tool_names.remove(id).unwrap_or_default()
+                            } else {
+                                tool_names.remove(id);
+                                name.clone()
+                            };
+                            if tool_name.is_empty() {
+                                tracing::warn!(id = %id, "LLM returned tool call with empty name, skipping");
+                                continue;
+                            }
+                            tool_calls.push(ToolCall { id: id.clone(), name: tool_name, input: input.clone() });
+                        }
+                    }
+                    LlmEvent::MessageEnd { usage } => {
+                        last_usage = Some(Usage {
+                            input_tokens: usage.input_tokens,
+                            output_tokens: usage.output_tokens,
+                            cache_read_input_tokens: usage.cache_read_input_tokens,
+                            cache_creation_input_tokens: usage.cache_creation_input_tokens,
+                        });
+                        let _ = tx
+                            .send(Ok(AgentEvent::TokenUsage {
+                                input_tokens: usage.input_tokens,
+                                output_tokens: usage.output_tokens,
+                                cache_read_tokens: usage.cache_read_input_tokens,
+                                cache_creation_tokens: usage.cache_creation_input_tokens,
+                            }))
+                            .await;
+                    }
+                    LlmEvent::Error(e) => {
+                        let _ = tx.send(Ok(AgentEvent::Error { message: e.clone() })).await;
+                        return Err(AgentError::LlmError(e.clone()));
+                    }
                 }
-            }
-            Ok(LlmEvent::MessageEnd { usage }) => {
-                let _ = tx
-                    .send(Ok(AgentEvent::TokenUsage {
-                        input_tokens: usage.input_tokens,
-                        output_tokens: usage.output_tokens,
-                        cache_read_tokens: usage.cache_read_input_tokens,
-                        cache_creation_tokens: usage.cache_creation_input_tokens,
-                    }))
-                    .await;
-            }
-            Ok(LlmEvent::Error(e)) => {
-                let _ = tx.send(Ok(AgentEvent::Error { message: e.clone() })).await;
-                return Err(AgentError::LlmError(e));
             }
             Err(e) => {
                 let _ = tx.send(Ok(AgentEvent::Error { message: e.to_string() })).await;
@@ -165,7 +183,7 @@ pub async fn process_llm_stream(
         }
     }
 
-    Ok((full_text, tool_calls))
+    Ok((full_text, tool_calls, last_usage))
 }
 
 // ---------------------------------------------------------------------------
@@ -199,8 +217,7 @@ mod tests {
 
     #[test]
     fn test_parse_tool_input_delta_json() {
-        let parsed =
-            parse_tool_input_delta(r#"{"path":"/tmp/a.txt"}"#).expect("should parse");
+        let parsed = parse_tool_input_delta(r#"{"path":"/tmp/a.txt"}"#).expect("should parse");
         assert_eq!(parsed["path"], "/tmp/a.txt");
     }
 
@@ -220,10 +237,7 @@ mod tests {
         let (tx, _rx) = mpsc::channel(8);
         let cancellation = CancellationToken::new();
         let events = vec![
-            Ok(LlmEvent::ToolUseStart {
-                id: "call_1".to_string(),
-                name: "read".to_string(),
-            }),
+            Ok(LlmEvent::ToolUseStart { id: "call_1".to_string(), name: "read".to_string() }),
             Ok(LlmEvent::ToolUseInputDelta {
                 id: "call_1".to_string(),
                 delta: r#"{"path":"/tmp/"#.to_string(),
@@ -238,12 +252,10 @@ mod tests {
                 input: serde_json::Value::Null,
             }),
         ];
-        let stream: forge_llm::LlmEventStream =
-            Box::pin(futures::stream::iter(events));
-        let (_text, tool_calls) =
-            process_llm_stream(stream, &tx, &cancellation, true)
-                .await
-                .expect("stream should be processed");
+        let stream: forge_llm::LlmEventStream = Box::pin(futures::stream::iter(events));
+        let (_text, tool_calls, _usage) = process_llm_stream(stream, &tx, &cancellation, true, None)
+            .await
+            .expect("stream should be processed");
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0].name, "read");
         assert_eq!(tool_calls[0].input["path"], "/tmp/a.txt");
@@ -254,10 +266,7 @@ mod tests {
         let (tx, _rx) = mpsc::channel(8);
         let cancellation = CancellationToken::new();
         let events = vec![
-            Ok(LlmEvent::ToolUseStart {
-                id: "call_2".to_string(),
-                name: "read".to_string(),
-            }),
+            Ok(LlmEvent::ToolUseStart { id: "call_2".to_string(), name: "read".to_string() }),
             Ok(LlmEvent::ToolUseInputDelta {
                 id: "call_2".to_string(),
                 delta: r#"{"path":"ignored"}"#.to_string(),
@@ -268,12 +277,10 @@ mod tests {
                 input: json!({"path": "/tmp/final.txt"}),
             }),
         ];
-        let stream: forge_llm::LlmEventStream =
-            Box::pin(futures::stream::iter(events));
-        let (_text, tool_calls) =
-            process_llm_stream(stream, &tx, &cancellation, false)
-                .await
-                .expect("stream should be processed");
+        let stream: forge_llm::LlmEventStream = Box::pin(futures::stream::iter(events));
+        let (_text, tool_calls, _usage) = process_llm_stream(stream, &tx, &cancellation, false, None)
+            .await
+            .expect("stream should be processed");
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0].input["path"], "/tmp/final.txt");
     }

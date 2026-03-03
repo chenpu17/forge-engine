@@ -12,11 +12,7 @@ const fn default_command_timeout() -> u64 {
 }
 
 fn default_dangerous_commands() -> Vec<String> {
-    vec![
-        "rm -rf".to_string(),
-        "sudo".to_string(),
-        "mkfs".to_string(),
-    ]
+    vec!["rm -rf".to_string(), "sudo".to_string(), "mkfs".to_string()]
 }
 
 const fn default_true() -> bool {
@@ -85,10 +81,7 @@ pub struct McpSettings {
 
 impl Default for McpSettings {
     fn default() -> Self {
-        Self {
-            mcp_enabled: true,
-            mcp_config_path: None,
-        }
+        Self { mcp_enabled: true, mcp_config_path: None }
     }
 }
 
@@ -239,8 +232,7 @@ impl EnvPolicy {
         match self.mode {
             EnvPolicyMode::All => env.into_iter().collect(),
             EnvPolicyMode::Allowlist => {
-                let mut allow: HashSet<String> =
-                    self.allowlist.iter().cloned().collect();
+                let mut allow: HashSet<String> = self.allowlist.iter().cloned().collect();
                 if let Some(preset) = self.preset_allowlist() {
                     allow.extend(preset.iter().map(|v| (*v).to_string()));
                 }

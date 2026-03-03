@@ -202,9 +202,7 @@ impl MemoryManageTool {
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
         if files.is_empty() {
-            return Ok(ToolOutput::success(format!(
-                "No memory files to export ({scope} scope)."
-            )));
+            return Ok(ToolOutput::success(format!("No memory files to export ({scope} scope).")));
         }
 
         let mut entries = Vec::new();

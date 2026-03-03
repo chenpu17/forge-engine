@@ -186,6 +186,44 @@ pub enum AgentEvent {
         /// Number of files restored.
         files_restored: usize,
     },
+    /// Per-agent cost update.
+    CostUpdate {
+        /// Agent identifier.
+        agent_id: String,
+        /// Input tokens in this update.
+        input_tokens: usize,
+        /// Output tokens in this update.
+        output_tokens: usize,
+        /// Cumulative estimated cost in USD for this agent.
+        estimated_cost_usd: f64,
+        /// Budget limit in USD, if configured.
+        budget_limit_usd: Option<f64>,
+    },
+    /// Cost approaching budget limit (above warning threshold).
+    CostWarning {
+        /// Agent identifier.
+        agent_id: String,
+        /// Current cumulative cost in USD.
+        current_usd: f64,
+        /// Budget limit in USD.
+        limit_usd: f64,
+        /// Percentage of budget consumed.
+        percentage: f64,
+    },
+    /// Budget exceeded — agent should gracefully shut down.
+    BudgetExceeded {
+        /// Agent identifier.
+        agent_id: String,
+        /// Current cumulative cost in USD.
+        current_usd: f64,
+        /// Budget limit in USD.
+        limit_usd: f64,
+    },
+    /// Trace recording completed for this agent.
+    TraceRecorded {
+        /// Trace identifier for linking parent/child traces.
+        trace_id: String,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -475,5 +513,49 @@ mod tests {
             let json2 = serde_json::to_string(&parsed).expect("re-serialize");
             assert_eq!(json, json2);
         }
+    }
+
+    #[test]
+    fn test_cost_update_event_serde() {
+        let event = AgentEvent::CostUpdate {
+            agent_id: "agent-1".to_string(),
+            input_tokens: 500,
+            output_tokens: 100,
+            estimated_cost_usd: 0.002_25,
+            budget_limit_usd: Some(1.0),
+        };
+        let json = serde_json::to_string(&event).expect("serialize");
+        let parsed: AgentEvent = serde_json::from_str(&json).expect("deserialize");
+        let json2 = serde_json::to_string(&parsed).expect("re-serialize");
+        assert_eq!(json, json2);
+    }
+
+    #[test]
+    fn test_cost_warning_event_serde() {
+        let event = AgentEvent::CostWarning {
+            agent_id: "agent-2".to_string(),
+            current_usd: 0.85,
+            limit_usd: 1.0,
+            percentage: 85.0,
+        };
+        let json = serde_json::to_string(&event).expect("serialize");
+        assert!(json.contains("cost_warning"));
+        let parsed: AgentEvent = serde_json::from_str(&json).expect("deserialize");
+        let json2 = serde_json::to_string(&parsed).expect("re-serialize");
+        assert_eq!(json, json2);
+    }
+
+    #[test]
+    fn test_budget_exceeded_event_serde() {
+        let event = AgentEvent::BudgetExceeded {
+            agent_id: "agent-3".to_string(),
+            current_usd: 5.5,
+            limit_usd: 5.0,
+        };
+        let json = serde_json::to_string(&event).expect("serialize");
+        assert!(json.contains("budget_exceeded"));
+        let parsed: AgentEvent = serde_json::from_str(&json).expect("deserialize");
+        let json2 = serde_json::to_string(&parsed).expect("re-serialize");
+        assert_eq!(json, json2);
     }
 }

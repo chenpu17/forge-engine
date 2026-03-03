@@ -19,6 +19,7 @@ forge-session.workspace = true
 forge-tools.workspace = true
 forge-mcp.workspace = true
 forge-agent.workspace = true
+forge-lsp.workspace = true
 
 forge-tools-coding.workspace = true
 

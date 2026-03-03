@@ -3,11 +3,11 @@
 //! This module provides an unbypassable security boundary that blocks
 //! dangerous operations even in Yolo mode.
 
-use std::sync::LazyLock;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 
 use crate::path_utils::normalize_path;
 

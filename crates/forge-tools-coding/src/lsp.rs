@@ -80,10 +80,7 @@ impl forge_domain::Tool for LspDiagnosticsTool {
             .await
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
-        client
-            .open_file(&abs_path)
-            .await
-            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+        client.open_file(&abs_path).await.map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
         let uri = path_to_uri(&abs_path);
         let result = client
@@ -104,12 +101,10 @@ impl forge_domain::Tool for LspDiagnosticsTool {
                     Ok(ToolOutput::success(formatted))
                 }
             }
-            Err(forge_lsp::LspError::ServerError { code: -32601, .. }) => {
-                Ok(ToolOutput::success(
-                    "Diagnostics not available (server does not support pull diagnostics). \
+            Err(forge_lsp::LspError::ServerError { code: -32601, .. }) => Ok(ToolOutput::success(
+                "Diagnostics not available (server does not support pull diagnostics). \
                      Try saving the file and checking compiler output instead.",
-                ))
-            }
+            )),
             Err(e) => Err(ToolError::ExecutionFailed(e.to_string())),
         }
     }
@@ -185,10 +180,7 @@ impl forge_domain::Tool for LspDefinitionTool {
             .await
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
-        client
-            .open_file(&abs_path)
-            .await
-            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+        client.open_file(&abs_path).await.map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
         let uri = path_to_uri(&abs_path);
         let result = client
@@ -287,10 +279,7 @@ impl forge_domain::Tool for LspReferencesTool {
             .await
             .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
-        client
-            .open_file(&abs_path)
-            .await
-            .map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
+        client.open_file(&abs_path).await.map_err(|e| ToolError::ExecutionFailed(e.to_string()))?;
 
         let uri = path_to_uri(&abs_path);
         let result = client
@@ -324,14 +313,9 @@ impl forge_domain::Tool for LspReferencesTool {
 fn get_lsp_manager(
     ctx: &dyn ToolExecutionContext,
 ) -> std::result::Result<&forge_lsp::LspManager, ToolError> {
-    let tool_ctx = ctx
-        .as_any()
-        .downcast_ref::<forge_tools::ToolContext>()
-        .ok_or_else(|| {
-            ToolError::ExecutionFailed(
-                "LSP not available. Context does not support LSP.".to_string(),
-            )
-        })?;
+    let tool_ctx = ctx.as_any().downcast_ref::<forge_tools::ToolContext>().ok_or_else(|| {
+        ToolError::ExecutionFailed("LSP not available. Context does not support LSP.".to_string())
+    })?;
 
     tool_ctx.lsp_manager.as_deref().ok_or_else(|| {
         ToolError::ExecutionFailed(
@@ -359,12 +343,8 @@ fn validate_path_boundary(
     abs_path: &Path,
     working_dir: &Path,
 ) -> std::result::Result<(), ToolError> {
-    let canonical = abs_path
-        .canonicalize()
-        .unwrap_or_else(|_| normalize_path(abs_path));
-    let canonical_wd = working_dir
-        .canonicalize()
-        .unwrap_or_else(|_| normalize_path(working_dir));
+    let canonical = abs_path.canonicalize().unwrap_or_else(|_| normalize_path(abs_path));
+    let canonical_wd = working_dir.canonicalize().unwrap_or_else(|_| normalize_path(working_dir));
 
     if !canonical.starts_with(&canonical_wd) {
         return Err(ToolError::InvalidParams(format!(
@@ -387,10 +367,8 @@ fn path_to_uri(path: &Path) -> String {
 fn format_diagnostics(value: &Value, file_path: &str) -> String {
     let mut output = String::new();
 
-    let items = value
-        .get("items")
-        .or_else(|| value.get("relatedDocuments"))
-        .and_then(Value::as_array);
+    let items =
+        value.get("items").or_else(|| value.get("relatedDocuments")).and_then(Value::as_array);
 
     if let Some(items) = items {
         for item in items {
@@ -402,15 +380,10 @@ fn format_diagnostics(value: &Value, file_path: &str) -> String {
                 _ => "diagnostic",
             };
 
-            let message = item
-                .get("message")
-                .and_then(Value::as_str)
-                .unwrap_or("(no message)");
+            let message = item.get("message").and_then(Value::as_str).unwrap_or("(no message)");
 
-            let line = item
-                .pointer("/range/start/line")
-                .and_then(Value::as_i64)
-                .map_or(0, |l| l + 1);
+            let line =
+                item.pointer("/range/start/line").and_then(Value::as_i64).map_or(0, |l| l + 1);
 
             let _ = writeln!(output, "{file_path}:{line}: [{severity}] {message}");
         }
@@ -442,15 +415,10 @@ fn format_locations(value: &Value, working_dir: &Path) -> String {
             .strip_prefix(working_dir_str.as_ref())
             .map_or(path, |p| p.strip_prefix('/').unwrap_or(p));
 
-        let line = loc
-            .pointer("/range/start/line")
-            .and_then(Value::as_i64)
-            .map_or(1, |l| l + 1);
+        let line = loc.pointer("/range/start/line").and_then(Value::as_i64).map_or(1, |l| l + 1);
 
-        let col = loc
-            .pointer("/range/start/character")
-            .and_then(Value::as_i64)
-            .map_or(1, |c| c + 1);
+        let col =
+            loc.pointer("/range/start/character").and_then(Value::as_i64).map_or(1, |c| c + 1);
 
         let _ = writeln!(output, "{display_path}:{line}:{col}");
     }

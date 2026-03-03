@@ -92,7 +92,11 @@ impl Tool for WriteTool {
         }
 
         // Validate path for security (path traversal, sensitive files, working dir)
-        let path = validate_write_path_with_confirmed(file_path, ctx.working_dir(), ctx.confirmed_paths())?;
+        let path = validate_write_path_with_confirmed(
+            file_path,
+            ctx.working_dir(),
+            ctx.confirmed_paths(),
+        )?;
 
         // Ensure parent directory exists
         if let Some(parent) = path.parent() {

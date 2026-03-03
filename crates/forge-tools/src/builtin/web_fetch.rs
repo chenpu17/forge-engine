@@ -18,6 +18,7 @@ use futures::StreamExt;
 use reqwest::Client;
 use serde_json::{json, Value};
 use std::collections::HashMap;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
@@ -132,16 +133,62 @@ pub struct WebFetchTool {
 }
 
 impl WebFetchTool {
-    /// Create a new `WebFetchTool`
-    #[must_use]
-    pub fn new() -> Self {
-        let client = Client::builder()
+    /// Build the base `ClientBuilder` with web-fetch defaults.
+    fn base_builder() -> reqwest::ClientBuilder {
+        Client::builder()
             .timeout(Duration::from_secs(DEFAULT_TIMEOUT_SECS))
             .user_agent("Mozilla/5.0 (compatible; Forge/1.0; +https://github.com/anthropics/forge)")
             .redirect(reqwest::redirect::Policy::limited(10))
-            .build()
-            .unwrap_or_else(|_| Client::new());
+    }
 
+    /// Build a client safely — falls back to `.no_proxy()` on failure
+    /// (avoids the `Client::new()` panic on macOS when system proxy query fails).
+    fn safe_build(builder: reqwest::ClientBuilder) -> Client {
+        let primary = catch_unwind(AssertUnwindSafe(|| builder.build()));
+        if let Ok(Ok(client)) = primary {
+            return client;
+        }
+        match primary {
+            Ok(Err(e)) => tracing::warn!("HTTP client build failed ({e}), retrying with no_proxy"),
+            Err(_) => tracing::warn!("HTTP client build panicked, retrying with no_proxy"),
+            Ok(Ok(_)) => {}
+        }
+
+        let fallback = catch_unwind(AssertUnwindSafe(|| Self::base_builder().no_proxy().build()));
+        match fallback {
+            Ok(Ok(client)) => client,
+            Ok(Err(e)) => {
+                tracing::error!(
+                    "no_proxy client build also failed ({e}); \
+                     this usually means the TLS backend is broken"
+                );
+                panic!("Cannot create any HTTP client: {e}");
+            }
+            Err(_) => {
+                tracing::error!("no_proxy client build panicked");
+                panic!("Cannot create any HTTP client: no_proxy builder panicked");
+            }
+        }
+    }
+
+    /// Create a new `WebFetchTool` (no proxy, safe fallback)
+    #[must_use]
+    pub fn new() -> Self {
+        let client = Self::safe_build(Self::base_builder());
+        Self { client, cache: Arc::new(RwLock::new(FetchCache::new())) }
+    }
+
+    /// Create with proxy configuration from `forge-infra`
+    #[must_use]
+    pub fn with_proxy(proxy: &forge_config::ProxyConfig) -> Self {
+        let builder = Self::base_builder();
+        let client = match forge_infra::http::configure_http_client_builder(builder, Some(proxy)) {
+            Ok(b) => Self::safe_build(b),
+            Err(e) => {
+                tracing::warn!("Proxy configuration failed ({e}), using direct connection");
+                Self::safe_build(Self::base_builder().no_proxy())
+            }
+        };
         Self { client, cache: Arc::new(RwLock::new(FetchCache::new())) }
     }
 
@@ -153,10 +200,8 @@ impl WebFetchTool {
 
     /// Normalize URL (upgrade HTTP to HTTPS)
     fn normalize_url(url: &str) -> String {
-        url.strip_prefix("http://").map_or_else(
-            || url.to_string(),
-            |stripped| format!("https://{stripped}"),
-        )
+        url.strip_prefix("http://")
+            .map_or_else(|| url.to_string(), |stripped| format!("https://{stripped}"))
     }
 
     /// Fetch URL content
@@ -214,8 +259,7 @@ impl WebFetchTool {
         } else {
             let original_host = parsed_url.host_str().unwrap_or("");
             let final_parsed = reqwest::Url::parse(&final_url).ok();
-            let final_host =
-                final_parsed.as_ref().and_then(|u| u.host_str()).unwrap_or("");
+            let final_host = final_parsed.as_ref().and_then(|u| u.host_str()).unwrap_or("");
 
             if original_host == final_host {
                 None
@@ -264,8 +308,7 @@ impl WebFetchTool {
         }
 
         // Stream response body with size limit to prevent memory exhaustion
-        let mut body_bytes =
-            Vec::with_capacity(MAX_CONTENT_LENGTH.min(MAX_RESPONSE_READ_SIZE));
+        let mut body_bytes = Vec::with_capacity(MAX_CONTENT_LENGTH.min(MAX_RESPONSE_READ_SIZE));
         let mut total_read: usize = 0;
         let mut stream = response.bytes_stream();
         let mut truncated_by_read_limit = false;
@@ -295,24 +338,21 @@ impl WebFetchTool {
         let body = String::from_utf8_lossy(&body_bytes).into_owned();
 
         // Convert based on content type
-        let text = if content_type.contains("text/html")
-            || content_type.contains("application/xhtml")
-        {
-            // Convert HTML to markdown-like text
-            html_to_markdown(&body)
-        } else if content_type.contains("text/")
-            || content_type.contains("application/json")
-        {
-            // Return as-is for text and JSON
-            body
-        } else {
-            // For other types, return a summary
-            format!(
-                "[Binary content of type: {}]\n\nContent length: {} bytes",
-                content_type,
-                body.len()
-            )
-        };
+        let text =
+            if content_type.contains("text/html") || content_type.contains("application/xhtml") {
+                // Convert HTML to markdown-like text
+                html_to_markdown(&body)
+            } else if content_type.contains("text/") || content_type.contains("application/json") {
+                // Return as-is for text and JSON
+                body
+            } else {
+                // For other types, return a summary
+                format!(
+                    "[Binary content of type: {}]\n\nContent length: {} bytes",
+                    content_type,
+                    body.len()
+                )
+            };
 
         // Truncate if too long (safely handling UTF-8 boundaries)
         let text = if text.len() > MAX_CONTENT_LENGTH {
@@ -322,10 +362,7 @@ impl WebFetchTool {
                     "\n\n[Content truncated. Read {total_read} bytes from stream (max: {MAX_RESPONSE_READ_SIZE} bytes). Output limited to {MAX_CONTENT_LENGTH} bytes]"
                 )
             } else {
-                format!(
-                    "\n\n[Content truncated. Total length: {} bytes]",
-                    text.len()
-                )
+                format!("\n\n[Content truncated. Total length: {} bytes]", text.len())
             };
             format!("{truncated}{truncation_note}")
         } else if truncated_by_read_limit {

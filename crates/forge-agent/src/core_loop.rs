@@ -8,6 +8,7 @@ use crate::{
         build_context_fingerprint, format_runtime_tool_states, persist_runtime_checkpoint,
         GitCheckpointManager, RuntimeCheckpointStore, RuntimeResumeState,
     },
+    cost_tracker::CostTracker,
     episodic_memory::EpisodicMemoryStore,
     executor::ToolExecutor,
     prepare::{run_optional_stage, run_pre_tool_stages, AgentLoopStage, PreToolStageOutput},
@@ -16,15 +17,16 @@ use crate::{
         check_tool_repetition, dispatch_and_execute_tools, DispatchState, ToolDispatchOutput,
         MAX_REJECTED_ENTRIES, REJECTION_TTL,
     },
+    trace_recorder::TraceRecorder,
     verifier::{VerifierPipeline, VerifierStats},
     AgentConfig, AgentError, ConfirmationHandler, Result,
 };
-use forge_domain::AgentEvent;
-use forge_prompt::{PromptContext, PromptManager};
+use forge_domain::{AgentEvent, CostCheckResult};
 use forge_llm::{
     ChatMessage, ChatRole, ContentBlock, InstrumentedProvider, LlmConfig, LlmProvider,
     MessageContent, RetryConfig,
 };
+use forge_prompt::{PromptContext, PromptManager};
 use forge_tools::trust_permission::{PermissionConfig, TrustAwarePermissionManager, TrustLevel};
 use futures::FutureExt;
 use parking_lot::Mutex;
@@ -47,8 +49,7 @@ const fn trust_level_from_setting(setting: forge_config::TrustLevelSetting) -> T
 }
 
 /// Stream of agent events.
-pub type AgentEventStream =
-    Pin<Box<dyn futures::Stream<Item = Result<AgentEvent>> + Send>>;
+pub type AgentEventStream = Pin<Box<dyn futures::Stream<Item = Result<AgentEvent>> + Send>>;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -251,10 +252,12 @@ impl CoreAgent {
                 Ok(()) => {}
                 Err(panic_payload) => {
                     let msg = panic_payload.downcast_ref::<&str>().map_or_else(
-                        || panic_payload.downcast_ref::<String>().map_or_else(
-                            || "Agent loop panicked (unknown payload)".to_string(),
-                            |s| format!("Agent loop panicked: {s}"),
-                        ),
+                        || {
+                            panic_payload.downcast_ref::<String>().map_or_else(
+                                || "Agent loop panicked (unknown payload)".to_string(),
+                                |s| format!("Agent loop panicked: {s}"),
+                            )
+                        },
                         |s| format!("Agent loop panicked: {s}"),
                     );
                     tracing::error!("{}", msg);
@@ -361,6 +364,24 @@ async fn run_agent_loop(
     let mut context_recovery_attempts = 0;
     // Track task completion state for graceful convergence
     let mut task_completed_at_iteration: Option<usize> = None;
+
+    // --- Cost tracking ---
+    let cost_config = forge_config::CostConfig::default();
+    let cost_tracker = Arc::new(CostTracker::from_config(&cost_config));
+    let agent_id = config
+        .session_id
+        .clone()
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    cost_tracker.register_agent(&agent_id, "main", &config.model, None);
+    let mut budget_exceeded = false;
+
+    // --- Trace recording ---
+    let mut trace_recorder = TraceRecorder::new(
+        config.session_id.as_deref(),
+        "main",
+        &config.model,
+        config.experimental.trace_recording,
+    );
 
     // Get tool definitions and names for prompt context
     let tool_defs: Vec<forge_llm::ToolDef> = executor
@@ -483,7 +504,25 @@ async fn run_agent_loop(
         // Send thinking start event
         let _ = tx.send(Ok(AgentEvent::ThinkingStart)).await;
 
-        let PreToolStageOutput { full_text, tool_calls } = run_pre_tool_stages(
+        // Begin trace round (if recording)
+        let messages_json = serde_json::to_string(&messages).unwrap_or_default();
+        trace_recorder.begin_round(
+            iteration,
+            &messages_json,
+            messages.len(),
+            tool_defs.len(),
+            &config.model,
+            config.generation.max_tokens,
+            config.generation.temperature,
+        );
+
+        let trace_ref = if trace_recorder.is_enabled() {
+            Some(&mut trace_recorder)
+        } else {
+            None
+        };
+
+        let PreToolStageOutput { full_text, tool_calls, usage } = run_pre_tool_stages(
             iteration,
             &mut messages,
             &provider,
@@ -493,8 +532,50 @@ async fn run_agent_loop(
             &tx,
             &cancellation,
             &mut context_recovery_attempts,
+            trace_ref,
         )
         .await?;
+
+        // --- Cost tracking: record usage and check budget ---
+        if let Some(ref u) = usage {
+            let check = cost_tracker.record_usage(&agent_id, u, &config.model);
+            // Always emit CostUpdate when cost tracking is enabled
+            if cost_tracker.is_enabled() {
+                let cost = cost_tracker.agent_cost(&agent_id).unwrap_or(0.0);
+                let _ = tx
+                    .send(Ok(AgentEvent::CostUpdate {
+                        agent_id: agent_id.clone(),
+                        input_tokens: u.input_tokens,
+                        output_tokens: u.output_tokens,
+                        estimated_cost_usd: cost,
+                        budget_limit_usd: None,
+                    }))
+                    .await;
+            }
+            match check {
+                CostCheckResult::Warning { current_usd, limit_usd, percentage } => {
+                    let _ = tx
+                        .send(Ok(AgentEvent::CostWarning {
+                            agent_id: agent_id.clone(),
+                            current_usd,
+                            limit_usd,
+                            percentage,
+                        }))
+                        .await;
+                }
+                CostCheckResult::BudgetExceeded { current_usd, limit_usd } => {
+                    let _ = tx
+                        .send(Ok(AgentEvent::BudgetExceeded {
+                            agent_id: agent_id.clone(),
+                            current_usd,
+                            limit_usd,
+                        }))
+                        .await;
+                    budget_exceeded = true;
+                }
+                CostCheckResult::Ok => {}
+            }
+        }
 
         tracing::debug!(
             iteration,
@@ -556,6 +637,18 @@ async fn run_agent_loop(
             {
                 store.clear(session_id).await?;
             }
+
+            // End trace round and finalize
+            trace_recorder.end_round();
+            if trace_recorder.is_enabled() {
+                let trace_id = trace_recorder.trace_id().to_string();
+                if let Err(e) = trace_recorder.finalize().await {
+                    tracing::warn!("Failed to finalize trace: {e}");
+                } else {
+                    let _ = tx.send(Ok(AgentEvent::TraceRecorded { trace_id })).await;
+                }
+            }
+
             tracing::info!(
                 iteration,
                 text_len = full_text.len(),
@@ -621,6 +714,38 @@ async fn run_agent_loop(
             )
             .await?
         };
+
+        // Record tool calls to trace (after dispatch)
+        if trace_recorder.is_enabled() {
+            for (call, result) in tool_calls.iter().zip(tool_results.iter()) {
+                // Duration is not tracked at this level; use 0 as placeholder.
+                // The ToolExecutor tracks per-tool metrics separately.
+                trace_recorder.record_tool_call(call, result, 0);
+            }
+        }
+
+        // End trace round
+        trace_recorder.end_round();
+
+        // Check budget exceeded — graceful shutdown after finishing current tool calls
+        if budget_exceeded {
+            tracing::info!("Budget exceeded — gracefully stopping agent loop");
+            trace_recorder.end_round();
+            if trace_recorder.is_enabled() {
+                let trace_id = trace_recorder.trace_id().to_string();
+                if let Err(e) = trace_recorder.finalize().await {
+                    tracing::warn!("Failed to finalize trace: {e}");
+                } else {
+                    let _ = tx.send(Ok(AgentEvent::TraceRecorded { trace_id })).await;
+                }
+            }
+            let _ = tx
+                .send(Ok(AgentEvent::Done {
+                    summary: Some("Agent stopped: budget exceeded.".to_string()),
+                }))
+                .await;
+            return Ok(());
+        }
 
         let finalize_stage = async {
             // Sweep expired entries from rejected_tools to prevent unbounded growth

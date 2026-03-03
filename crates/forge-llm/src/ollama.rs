@@ -42,11 +42,9 @@ impl OllamaProvider {
 
     /// Check if Ollama is running
     pub async fn is_available(&self) -> bool {
-        // Use no_proxy() to avoid macOS system proxy detection issues
-        let client = reqwest::Client::builder()
-            .no_proxy()
-            .build()
-            .unwrap_or_else(|_| reqwest::Client::new());
+        // Force direct connection to avoid system proxy issues for localhost checks.
+        let no_proxy = forge_config::ProxyConfig::none();
+        let client = crate::base::create_http_client_with_proxy(false, Some(&no_proxy));
         let url = format!("{}/api/tags", self.base_url);
 
         client.get(&url).send().await.is_ok_and(|r| r.status().is_success())
@@ -54,11 +52,9 @@ impl OllamaProvider {
 
     /// Fetch available models from Ollama
     pub async fn fetch_models(&mut self) -> Result<Vec<ModelInfo>> {
-        // Use no_proxy() to avoid macOS system proxy detection issues
-        let client = reqwest::Client::builder()
-            .no_proxy()
-            .build()
-            .unwrap_or_else(|_| reqwest::Client::new());
+        // Force direct connection to avoid system proxy issues for localhost checks.
+        let no_proxy = forge_config::ProxyConfig::none();
+        let client = crate::base::create_http_client_with_proxy(false, Some(&no_proxy));
         let url = format!("{}/api/tags", self.base_url);
 
         let response = client.get(&url).send().await?;

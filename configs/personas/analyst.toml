@@ -9,3 +9,6 @@ include = ["read", "glob", "grep", "bash", "write", "web_search"]
 
 [subagents]
 enabled = ["explore", "analyst"]
+
+[templates]
+enabled = ["security", "data_analysis"]

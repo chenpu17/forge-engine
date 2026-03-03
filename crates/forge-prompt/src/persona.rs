@@ -26,6 +26,9 @@ pub struct PersonaConfig {
     /// Disabled tools.
     #[serde(default)]
     pub disabled_tools: Vec<String>,
+    /// Enabled sub-agent types. `None` means all types are allowed.
+    #[serde(default)]
+    pub enabled_subagents: Option<Vec<String>>,
     /// Additional options.
     #[serde(default)]
     pub options: PersonaOptions,
@@ -72,6 +75,7 @@ impl PersonaConfig {
             prompt,
             templates: vec!["tool_usage".to_string()],
             disabled_tools: Vec::new(),
+            enabled_subagents: None,
             options: PersonaOptions::default(),
         }
     }
@@ -88,16 +92,9 @@ impl PersonaConfig {
             .map_err(|e| PromptError::Parse(format!("{}: {e}", path.display())))?;
 
         let persona = toml_value.get("persona").unwrap_or(&toml_value);
-        let name = persona
-            .get("name")
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown")
-            .to_string();
-        let description = persona
-            .get("description")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
+        let name = persona.get("name").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
+        let description =
+            persona.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string();
 
         let templates = toml_value
             .get("templates")
@@ -105,23 +102,21 @@ impl PersonaConfig {
             .and_then(|v| v.as_array())
             .map_or_else(
                 || vec!["tool_usage".to_string()],
-                |arr| {
-                    arr.iter()
-                        .filter_map(|v| v.as_str().map(String::from))
-                        .collect()
-                },
+                |arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect(),
             );
 
         let disabled_tools = toml_value
             .get("tools")
             .and_then(|t| t.get("disabled"))
             .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str().map(String::from))
-                    .collect()
-            })
+            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
             .unwrap_or_default();
+
+        let enabled_subagents = toml_value
+            .get("subagents")
+            .and_then(|t| t.get("enabled"))
+            .and_then(|v| v.as_array())
+            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect());
 
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         let options = toml_value
@@ -148,23 +143,14 @@ impl PersonaConfig {
                     .and_then(|v| v.as_table())
                     .map(|t| {
                         t.iter()
-                            .filter_map(|(k, v)| {
-                                v.as_integer().map(|n| (k.clone(), n as usize))
-                            })
+                            .filter_map(|(k, v)| v.as_integer().map(|n| (k.clone(), n as usize)))
                             .collect()
                     })
                     .unwrap_or_default(),
             })
             .unwrap_or_default();
 
-        Ok(Self {
-            name,
-            description,
-            prompt,
-            templates,
-            disabled_tools,
-            options,
-        })
+        Ok(Self { name, description, prompt, templates, disabled_tools, enabled_subagents, options })
     }
 }
 
@@ -224,9 +210,7 @@ reflection_enabled = true
         )
         .expect("write toml");
 
-        let config =
-            PersonaConfig::from_file(&path, "prompt content".to_string())
-                .expect("parse");
+        let config = PersonaConfig::from_file(&path, "prompt content".to_string()).expect("parse");
         assert_eq!(config.name, "coder");
         assert_eq!(config.templates, vec!["tool_usage", "git_protocol"]);
         assert_eq!(config.disabled_tools, vec!["write"]);

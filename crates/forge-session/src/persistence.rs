@@ -98,11 +98,7 @@ impl SessionExporter {
             "**Created:** {}",
             session.metadata.created_at.format("%Y-%m-%d %H:%M:%S UTC")
         );
-        let _ = write!(
-            md,
-            "**Working Directory:** {}\n\n",
-            session.config.working_dir.display()
-        );
+        let _ = write!(md, "**Working Directory:** {}\n\n", session.config.working_dir.display());
         md.push_str("---\n\n");
 
         // Messages

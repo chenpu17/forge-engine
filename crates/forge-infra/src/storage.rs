@@ -119,16 +119,13 @@ impl JsonFileStore {
     /// Returns error if directory cannot be created.
     pub fn open(dir: &Path) -> Result<Self> {
         std::fs::create_dir_all(dir)?;
-        Ok(Self {
-            dir: dir.to_path_buf(),
-        })
+        Ok(Self { dir: dir.to_path_buf() })
     }
 
     /// Convert key to safe file path.
     fn key_to_path(&self, key: &str) -> PathBuf {
-        let safe_key = key
-            .replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], "_")
-            .replace("..", "_");
+        let safe_key =
+            key.replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], "_").replace("..", "_");
         self.dir.join(format!("{safe_key}.json"))
     }
 }
@@ -199,9 +196,7 @@ mod tests {
         let dir = tempdir().expect("create temp dir");
         let store = JsonFileStore::open(dir.path()).expect("open store");
 
-        store
-            .set("key1", &"value1".to_string())
-            .expect("set");
+        store.set("key1", &"value1".to_string()).expect("set");
         let value: Option<String> = store.get("key1").expect("get");
         assert_eq!(value, Some("value1".to_string()));
 
@@ -231,9 +226,7 @@ mod tests {
         let dir = tempdir().expect("create temp dir");
         let store = JsonFileStore::open(dir.path()).expect("open store");
 
-        store
-            .set("../../../etc/passwd", &"test".to_string())
-            .expect("set");
+        store.set("../../../etc/passwd", &"test".to_string()).expect("set");
         let path = store.key_to_path("../../../etc/passwd");
         assert!(!path.to_string_lossy().contains(".."));
     }

@@ -104,7 +104,11 @@ impl Tool for EditTool {
         }
 
         // Validate path for security (path traversal, sensitive files, symlink protection)
-        let path = validate_write_path_with_confirmed(file_path, ctx.working_dir(), ctx.confirmed_paths())?;
+        let path = validate_write_path_with_confirmed(
+            file_path,
+            ctx.working_dir(),
+            ctx.confirmed_paths(),
+        )?;
 
         // Read file
         let content = tokio::fs::read_to_string(&path)

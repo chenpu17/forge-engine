@@ -207,7 +207,11 @@ impl RequestDeduplicator {
 
         cache.retain(|_, entry| {
             let age = now.duration_since(entry.created_at);
-            if entry.is_pending { age < pending_timeout } else { age < completed_ttl }
+            if entry.is_pending {
+                age < pending_timeout
+            } else {
+                age < completed_ttl
+            }
         });
     }
 

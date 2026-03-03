@@ -104,9 +104,7 @@ impl RuntimeCheckpointStore {
         // Allowlist: non-empty, alphanumeric with hyphens/underscores only
         if session_id.is_empty()
             || session_id.contains('\0')
-            || !session_id
-                .chars()
-                .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+            || !session_id.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_')
         {
             return Err(AgentError::SessionError(format!(
                 "Invalid session_id '{session_id}': must be non-empty alphanumeric with hyphens/underscores only"
@@ -416,11 +414,7 @@ pub(crate) async fn persist_runtime_checkpoint(
 
 /// Build a deduplication marker for a tool call's side effects.
 pub(crate) fn build_side_effect_marker(call: &ToolCall) -> String {
-    format!(
-        "{}:{}",
-        call.name,
-        crate::tool_dispatch::normalize_json(&call.input)
-    )
+    format!("{}:{}", call.name, crate::tool_dispatch::normalize_json(&call.input))
 }
 
 /// Build a fingerprint for the current agent context (working dir + model).

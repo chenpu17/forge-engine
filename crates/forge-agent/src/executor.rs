@@ -159,7 +159,10 @@ impl ToolExecutor {
 
             match result {
                 Ok(Ok(output)) => {
-                    if let Some(result) = self.handle_output(call, output, &retry_config, &mut attempt, &start, &ctx).await {
+                    if let Some(result) = self
+                        .handle_output(call, output, &retry_config, &mut attempt, &start, &ctx)
+                        .await
+                    {
                         return result;
                     }
                 }
@@ -167,7 +170,11 @@ impl ToolExecutor {
                     // Path confirmation — return immediately
                     if let ToolError::PathConfirmationRequired { path, reason } = &e {
                         tracing::info!(tool = %call.name, call_id = %call.id, path = %path, "Path confirmation required");
-                        return tool_result_needs_path_confirmation(&call.id, path.clone(), reason.clone());
+                        return tool_result_needs_path_confirmation(
+                            &call.id,
+                            path.clone(),
+                            reason.clone(),
+                        );
                     }
 
                     tracing::warn!(tool = %call.name, call_id = %call.id, elapsed_ms = start.elapsed().as_millis(), error = %e, "Tool execution failed");
@@ -187,7 +194,13 @@ impl ToolExecutor {
                     if retry_config.is_enabled() && attempt < retry_config.max_retries {
                         attempt += 1;
                         let delay_ms = retry_config.delay_for_attempt(attempt - 1);
-                        tracing::info!(tool = call.name, attempt, max_retries = retry_config.max_retries, delay_ms, "Retrying after timeout");
+                        tracing::info!(
+                            tool = call.name,
+                            attempt,
+                            max_retries = retry_config.max_retries,
+                            delay_ms,
+                            "Retrying after timeout"
+                        );
                         tokio::time::sleep(Duration::from_millis(delay_ms)).await;
                         continue;
                     }
@@ -199,7 +212,11 @@ impl ToolExecutor {
                         format!(
                             "Tool execution timed out after {}s{}",
                             self.timeout.as_secs(),
-                            if attempt > 0 { format!(" (after {attempt} retries)") } else { String::new() }
+                            if attempt > 0 {
+                                format!(" (after {attempt} retries)")
+                            } else {
+                                String::new()
+                            }
                         ),
                     );
                 }
@@ -226,8 +243,10 @@ impl ToolExecutor {
                 *attempt += 1;
                 let delay_ms = retry_config.delay_for_attempt(*attempt - 1);
                 tracing::info!(
-                    tool = call.name, attempt = *attempt,
-                    max_retries = retry_config.max_retries, delay_ms,
+                    tool = call.name,
+                    attempt = *attempt,
+                    max_retries = retry_config.max_retries,
+                    delay_ms,
                     "Retrying tool execution after error"
                 );
                 tokio::time::sleep(Duration::from_millis(delay_ms)).await;
@@ -348,8 +367,7 @@ impl ToolExecutor {
         let mut current_is_readonly = true;
 
         for call in calls {
-            let is_readonly =
-                self.registry.get(&call.name).is_some_and(|tool| tool.is_readonly());
+            let is_readonly = self.registry.get(&call.name).is_some_and(|tool| tool.is_readonly());
 
             if is_readonly && current_is_readonly {
                 current_group.push(call.clone());
@@ -535,11 +553,7 @@ mod tests {
 
     #[test]
     fn test_tool_call_empty_name_detection() {
-        let call = ToolCall {
-            id: "call_123".to_string(),
-            name: String::new(),
-            input: json!({}),
-        };
+        let call = ToolCall { id: "call_123".to_string(), name: String::new(), input: json!({}) };
 
         assert!(call.name.is_empty(), "Empty name should be detectable");
     }

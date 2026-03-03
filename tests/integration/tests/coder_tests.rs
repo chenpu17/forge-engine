@@ -11,9 +11,7 @@ use std::sync::Arc;
 /// Helper: build SDK with builtin tools from a blocking context.
 /// The SDK builder's `build()` uses `block_on` internally for tool registration,
 /// which cannot nest inside a tokio runtime. We use `spawn_blocking` to work around this.
-async fn build_sdk_with_builtin_tools(
-    work_dir: std::path::PathBuf,
-) -> forge_sdk::ForgeSDK {
+async fn build_sdk_with_builtin_tools(work_dir: std::path::PathBuf) -> forge_sdk::ForgeSDK {
     let sdk = tokio::task::spawn_blocking(move || {
         let mock_provider = Arc::new(forge_agent::MockLlmProvider::new());
         ForgeSDKBuilder::new()
@@ -36,18 +34,9 @@ fn coding_tools_register_into_registry() {
     register_coding_tools(&mut registry);
 
     let names = registry.list_names();
-    assert!(
-        names.contains(&"lsp_diagnostics"),
-        "should register lsp_diagnostics"
-    );
-    assert!(
-        names.contains(&"lsp_definition"),
-        "should register lsp_definition"
-    );
-    assert!(
-        names.contains(&"lsp_references"),
-        "should register lsp_references"
-    );
+    assert!(names.contains(&"lsp_diagnostics"), "should register lsp_diagnostics");
+    assert!(names.contains(&"lsp_definition"), "should register lsp_definition");
+    assert!(names.contains(&"lsp_references"), "should register lsp_references");
     assert!(names.contains(&"symbols"), "should register symbols");
     assert_eq!(names.len(), 4, "should register exactly 4 coding tools");
 }
@@ -65,11 +54,7 @@ fn coding_tools_have_valid_defs() {
             "tool description should not be empty for {}",
             def.name
         );
-        assert!(
-            def.parameters.is_object(),
-            "parameters should be a JSON object for {}",
-            def.name
-        );
+        assert!(def.parameters.is_object(), "parameters should be a JSON object for {}", def.name);
     }
 }
 

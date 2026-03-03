@@ -4,6 +4,7 @@
 
 use crate::secret::SecretStore;
 use forge_config::{ProxyConfig, ProxyMode};
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use thiserror::Error;
 
 /// HTTP client errors
@@ -28,6 +29,36 @@ pub enum HttpError {
 
 /// Result type for HTTP operations
 pub type HttpResult<T> = Result<T, HttpError>;
+
+fn safe_build_client<F>(builder: reqwest::ClientBuilder, rebuild: F) -> HttpResult<reqwest::Client>
+where
+    F: FnOnce() -> reqwest::ClientBuilder,
+{
+    let primary = catch_unwind(AssertUnwindSafe(|| builder.build()));
+    if let Ok(Ok(client)) = primary {
+        return Ok(client);
+    }
+    match primary {
+        Ok(Err(e)) => {
+            tracing::warn!("HTTP client build failed ({e}), retrying with no_proxy");
+        }
+        Err(_) => {
+            tracing::warn!("HTTP client build panicked, retrying with no_proxy");
+        }
+        Ok(Ok(_)) => {}
+    }
+
+    let fallback = catch_unwind(AssertUnwindSafe(|| rebuild().no_proxy().build()));
+    match fallback {
+        Ok(Ok(client)) => Ok(client),
+        Ok(Err(e)) => Err(HttpError::BuildError(format!(
+            "Failed to build fallback no_proxy HTTP client: {e}"
+        ))),
+        Err(_) => Err(HttpError::BuildError(
+            "Failed to build fallback no_proxy HTTP client: builder panicked".to_string(),
+        )),
+    }
+}
 
 fn host_matches_no_proxy(host: &str, pattern: &str) -> bool {
     let pattern = pattern.trim();
@@ -96,11 +127,15 @@ pub fn configure_http_client_builder(
             let no_proxy = proxy_config.effective_no_proxy();
             let http_url = proxy_config
                 .effective_http_url()
-                .map(|s| reqwest::Url::parse(&s).map_err(|e| HttpError::InvalidProxyUrl(e.to_string())))
+                .map(|s| {
+                    reqwest::Url::parse(&s).map_err(|e| HttpError::InvalidProxyUrl(e.to_string()))
+                })
                 .transpose()?;
             let https_url = proxy_config
                 .effective_https_url()
-                .map(|s| reqwest::Url::parse(&s).map_err(|e| HttpError::InvalidProxyUrl(e.to_string())))
+                .map(|s| {
+                    reqwest::Url::parse(&s).map_err(|e| HttpError::InvalidProxyUrl(e.to_string()))
+                })
                 .transpose()?;
 
             if http_url.is_some() || https_url.is_some() {
@@ -151,9 +186,12 @@ pub fn create_http_client(proxy: Option<&ProxyConfig>) -> HttpResult<reqwest::Cl
         .timeout(std::time::Duration::from_secs(300))
         .connect_timeout(std::time::Duration::from_secs(30));
 
-    configure_http_client_builder(builder, proxy)?
-        .build()
-        .map_err(|e| HttpError::BuildError(e.to_string()))
+    let configured = configure_http_client_builder(builder, proxy)?;
+    safe_build_client(configured, || {
+        reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(300))
+            .connect_timeout(std::time::Duration::from_secs(30))
+    })
 }
 
 /// Create an HTTP client with no proxy (direct connection)
@@ -179,12 +217,12 @@ pub fn create_system_proxy_client() -> HttpResult<reqwest::Client> {
 /// # Errors
 /// Returns error if client construction fails
 pub fn create_streaming_client(proxy: Option<&ProxyConfig>) -> HttpResult<reqwest::Client> {
-    let builder = reqwest::Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(30));
+    let builder = reqwest::Client::builder().connect_timeout(std::time::Duration::from_secs(30));
 
-    configure_http_client_builder(builder, proxy)?
-        .build()
-        .map_err(|e| HttpError::BuildError(e.to_string()))
+    let configured = configure_http_client_builder(builder, proxy)?;
+    safe_build_client(configured, || {
+        reqwest::Client::builder().connect_timeout(std::time::Duration::from_secs(30))
+    })
 }
 
 #[cfg(test)]

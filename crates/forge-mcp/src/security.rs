@@ -210,10 +210,7 @@ impl McpSecurity {
         name.strip_prefix("mcp__").map_or_else(
             || name.to_string(),
             |rest| {
-                rest.find("__").map_or_else(
-                    || name.to_string(),
-                    |pos| rest[pos + 2..].to_string(),
-                )
+                rest.find("__").map_or_else(|| name.to_string(), |pos| rest[pos + 2..].to_string())
             },
         )
     }

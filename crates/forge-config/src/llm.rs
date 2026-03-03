@@ -61,10 +61,7 @@ impl LlmProvider {
             Self::Anthropic
         } else if m.starts_with("gpt") || m.starts_with("o1") || m.starts_with("o3") {
             Self::OpenAI
-        } else if m.starts_with("llama")
-            || m.starts_with("mistral")
-            || m.starts_with("codellama")
-        {
+        } else if m.starts_with("llama") || m.starts_with("mistral") || m.starts_with("codellama") {
             Self::Ollama
         } else {
             Self::OpenAI
@@ -189,8 +186,7 @@ impl LlmConfig {
     /// Get the effective provider (explicit or inferred from model).
     #[must_use]
     pub fn effective_provider(&self) -> LlmProvider {
-        self.provider
-            .unwrap_or_else(|| LlmProvider::from_model(&self.model))
+        self.provider.unwrap_or_else(|| LlmProvider::from_model(&self.model))
     }
 
     /// Get the effective base URL.
@@ -293,11 +289,8 @@ mod tests {
         };
         assert_eq!(config.effective_provider(), LlmProvider::OpenAI);
 
-        let config = LlmConfig {
-            provider: None,
-            model: "gpt-4o".to_string(),
-            ..Default::default()
-        };
+        let config =
+            LlmConfig { provider: None, model: "gpt-4o".to_string(), ..Default::default() };
         assert_eq!(config.effective_provider(), LlmProvider::OpenAI);
     }
 }

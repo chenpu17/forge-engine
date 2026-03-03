@@ -285,10 +285,7 @@ async fn tier3_llm_summarize(
 
     let compression_messages = prepare_compression_request(to_summarize);
 
-    let llm_config = forge_llm::LlmConfig {
-        model: config.model.clone(),
-        ..Default::default()
-    };
+    let llm_config = forge_llm::LlmConfig { model: config.model.clone(), ..Default::default() };
 
     let timeout = std::time::Duration::from_secs(TIER3_TIMEOUT_SECS);
     let stream_result = tokio::time::timeout(
@@ -602,9 +599,8 @@ mod tests {
     #[test]
     fn trim_to_fit_keeps_recent() {
         // Create messages that exceed a tiny context window
-        let messages: Vec<ChatMessage> = (0..10)
-            .map(|i| text_msg(ChatRole::User, &"x".repeat(500 * (i + 1))))
-            .collect();
+        let messages: Vec<ChatMessage> =
+            (0..10).map(|i| text_msg(ChatRole::User, &"x".repeat(500 * (i + 1)))).collect();
         let result = trim_to_fit(&messages, 20_000);
         // Should keep fewer messages than original
         assert!(result.len() <= messages.len());

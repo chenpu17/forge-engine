@@ -12,3 +12,6 @@ enabled = ["research", "explore"]
 
 [options]
 max_iterations = 50
+
+[templates]
+enabled = ["security"]

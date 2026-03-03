@@ -42,8 +42,8 @@ pub use task_output::TaskOutputTool;
 pub use todo::{TodoItem, TodoState, TodoStatus, TodoWriteTool};
 pub use web_fetch::{FetchCache, WebFetchTool};
 pub use web_search::{
-    BraveSearchProvider, DuckDuckGoProvider, ExaSearchProvider, MockSearchProvider,
-    SearchProvider, SearchProviderType, SearchResult, WebSearchTool,
+    BraveSearchProvider, DuckDuckGoProvider, ExaSearchProvider, MockSearchProvider, SearchProvider,
+    SearchProviderType, SearchResult, WebSearchTool,
 };
 
 // Legacy bash module - re-export from shell for backwards compatibility

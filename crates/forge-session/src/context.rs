@@ -248,8 +248,7 @@ impl ContextManager {
         result.push(Message {
             role: MessageRole::System,
             content: MessageContent::Text(format!("[Context Summary]\n{summary}")),
-            timestamp: dropped_messages
-                .first().map_or_else(chrono::Utc::now, |m| m.timestamp),
+            timestamp: dropped_messages.first().map_or_else(chrono::Utc::now, |m| m.timestamp),
         });
 
         // Add kept messages
@@ -352,18 +351,16 @@ impl ContextManager {
             // Match common file path patterns
             for word in text.split_whitespace() {
                 if (word.contains('/') || word.contains('\\'))
-                    && (std::path::Path::new(word)
-                        .extension()
-                        .is_some_and(|ext| {
-                            ext.eq_ignore_ascii_case("rs")
-                                || ext.eq_ignore_ascii_case("ts")
-                                || ext.eq_ignore_ascii_case("tsx")
-                                || ext.eq_ignore_ascii_case("js")
-                                || ext.eq_ignore_ascii_case("json")
-                                || ext.eq_ignore_ascii_case("md")
-                                || ext.eq_ignore_ascii_case("toml")
-                                || ext.eq_ignore_ascii_case("py")
-                        }))
+                    && (std::path::Path::new(word).extension().is_some_and(|ext| {
+                        ext.eq_ignore_ascii_case("rs")
+                            || ext.eq_ignore_ascii_case("ts")
+                            || ext.eq_ignore_ascii_case("tsx")
+                            || ext.eq_ignore_ascii_case("js")
+                            || ext.eq_ignore_ascii_case("json")
+                            || ext.eq_ignore_ascii_case("md")
+                            || ext.eq_ignore_ascii_case("toml")
+                            || ext.eq_ignore_ascii_case("py")
+                    }))
                 {
                     let clean = word.trim_matches(|c: char| {
                         !c.is_alphanumeric()

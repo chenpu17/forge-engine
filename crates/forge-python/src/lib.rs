@@ -46,10 +46,7 @@ pub struct ForgeSDK {
 impl ForgeSDK {
     #[new]
     fn new(config: PyForgeConfig) -> Self {
-        Self {
-            inner: std::sync::Arc::new(tokio::sync::RwLock::new(None)),
-            config,
-        }
+        Self { inner: std::sync::Arc::new(tokio::sync::RwLock::new(None)), config }
     }
 
     /// Initialize the SDK
@@ -73,7 +70,9 @@ impl ForgeSDK {
 
             builder = builder.with_builtin_tools();
 
-            let sdk = builder.build().map_err(|e| {
+            // Use build_async() because we are already inside rt.block_on().
+            // build() would create a nested runtime internally and panic.
+            let sdk = builder.build_async().await.map_err(|e| {
                 pyo3::exceptions::PyRuntimeError::new_err(format!("Failed to init SDK: {e}"))
             })?;
 
@@ -88,10 +87,11 @@ impl ForgeSDK {
         let inner = self.inner.clone();
 
         rt.block_on(async move {
-            let guard: tokio::sync::RwLockReadGuard<'_, Option<forge_sdk::ForgeSDK>> = inner.read().await;
-            let sdk = guard.as_ref().ok_or_else(|| {
-                pyo3::exceptions::PyRuntimeError::new_err("SDK not initialized")
-            })?;
+            let guard: tokio::sync::RwLockReadGuard<'_, Option<forge_sdk::ForgeSDK>> =
+                inner.read().await;
+            let sdk = guard
+                .as_ref()
+                .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("SDK not initialized"))?;
             let config = sdk.config().await;
             serde_json::to_string(&config)
                 .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("{e}")))
@@ -99,9 +99,6 @@ impl ForgeSDK {
     }
 
     fn __repr__(&self) -> String {
-        format!(
-            "ForgeSDK(model={:?}, provider={:?})",
-            self.config.model, self.config.provider
-        )
+        format!("ForgeSDK(model={:?}, provider={:?})", self.config.model, self.config.provider)
     }
 }

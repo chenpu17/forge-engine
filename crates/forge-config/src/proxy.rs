@@ -30,7 +30,6 @@ impl Default for ProxyMode {
     }
 }
 
-
 impl ProxyMode {
     /// Parse from string (for environment variable).
     #[must_use]
@@ -87,11 +86,7 @@ impl ProxyAuth {
 }
 
 fn default_no_proxy() -> Vec<String> {
-    vec![
-        "localhost".to_string(),
-        "127.0.0.1".to_string(),
-        "::1".to_string(),
-    ]
+    vec!["localhost".to_string(), "127.0.0.1".to_string(), "::1".to_string()]
 }
 
 fn parse_env_bool(value: &str) -> Option<bool> {
@@ -142,38 +137,25 @@ impl ProxyConfig {
     /// Create a "no proxy" configuration.
     #[must_use]
     pub fn none() -> Self {
-        Self {
-            mode: ProxyMode::None,
-            ..Default::default()
-        }
+        Self { mode: ProxyMode::None, ..Default::default() }
     }
 
     /// Create a "system proxy" configuration.
     #[must_use]
     pub fn system() -> Self {
-        Self {
-            mode: ProxyMode::System,
-            ..Default::default()
-        }
+        Self { mode: ProxyMode::System, ..Default::default() }
     }
 
     /// Create an "environment variable" proxy configuration.
     #[must_use]
     pub fn environment() -> Self {
-        Self {
-            mode: ProxyMode::Environment,
-            ..Default::default()
-        }
+        Self { mode: ProxyMode::Environment, ..Default::default() }
     }
 
     /// Create a manual proxy configuration.
     #[must_use]
     pub fn manual(http_url: impl Into<String>) -> Self {
-        Self {
-            mode: ProxyMode::Manual,
-            http_url: Some(http_url.into()),
-            ..Default::default()
-        }
+        Self { mode: ProxyMode::Manual, http_url: Some(http_url.into()), ..Default::default() }
     }
 
     /// Validate proxy configuration.
@@ -185,12 +167,18 @@ impl ProxyConfig {
             return Err("proxy mode is 'manual' but no http_url is set".into());
         }
         if let Some(ref url) = self.http_url {
-            if !url.starts_with("http://") && !url.starts_with("https://") && !url.starts_with("socks5://") {
+            if !url.starts_with("http://")
+                && !url.starts_with("https://")
+                && !url.starts_with("socks5://")
+            {
                 return Err(format!("invalid proxy http_url scheme: {url}"));
             }
         }
         if let Some(ref url) = self.https_url {
-            if !url.starts_with("http://") && !url.starts_with("https://") && !url.starts_with("socks5://") {
+            if !url.starts_with("http://")
+                && !url.starts_with("https://")
+                && !url.starts_with("socks5://")
+            {
                 return Err(format!("invalid proxy https_url scheme: {url}"));
             }
         }

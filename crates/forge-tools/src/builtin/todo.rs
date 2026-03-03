@@ -173,9 +173,8 @@ impl Tool for TodoWriteTool {
         // Parse todos from params
         let todos_value = params.get("todos").cloned().unwrap_or(Value::Array(vec![]));
 
-        let todos: Vec<TodoItem> = serde_json::from_value(todos_value).map_err(|e| {
-            ToolError::InvalidParams(format!("Failed to parse todos: {e}"))
-        })?;
+        let todos: Vec<TodoItem> = serde_json::from_value(todos_value)
+            .map_err(|e| ToolError::InvalidParams(format!("Failed to parse todos: {e}")))?;
 
         // Validate: only one task should be in_progress
         let in_progress_count = todos.iter().filter(|t| t.status == TodoStatus::InProgress).count();

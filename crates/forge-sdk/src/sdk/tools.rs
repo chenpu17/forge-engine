@@ -77,10 +77,7 @@ impl ForgeSDK {
     pub async fn tool_context_for_workflow(&self) -> ToolContext {
         let (working_dir, timeout_secs) = {
             let config = self.config.read().await;
-            (
-                config.working_dir.clone(),
-                config.tools.bash_timeout,
-            )
+            (config.working_dir.clone(), config.tools.bash_timeout)
         };
         let confirmed_paths = self.confirmed_paths.read().await.clone();
         ToolContext {
@@ -89,7 +86,6 @@ impl ForgeSDK {
             timeout_secs,
             confirmed_paths,
             bash_readonly: false,
-            #[cfg(feature = "lsp")]
             lsp_manager: Some(self.lsp_manager.clone()),
             ..ToolContext::default()
         }
@@ -102,38 +98,43 @@ impl ForgeSDK {
     }
 
     /// Set the list of disabled tools (replaces existing list).
-    pub async fn set_disabled_tools(&self, tools: Vec<String>) -> Result<()> {
+    ///
+    /// The in-memory config is always updated. Persistence to disk is
+    /// best-effort: failures are logged but do not block the caller,
+    /// so this works in sandboxed / read-only environments.
+    pub async fn set_disabled_tools(&self, tools: Vec<String>) {
         {
             let mut config = self.config.write().await;
             config.tools.disabled = tools;
         }
-        self.save_tools_config().await?;
+        self.try_save_tools_config().await;
         self.refresh_subagent_security().await;
-        Ok(())
     }
 
     /// Enable a specific tool.
-    pub async fn enable_tool(&self, name: &str) -> Result<()> {
+    ///
+    /// Best-effort persistence (see [`set_disabled_tools`](Self::set_disabled_tools)).
+    pub async fn enable_tool(&self, name: &str) {
         {
             let mut config = self.config.write().await;
             config.tools.disabled.retain(|t| t != name);
         }
-        self.save_tools_config().await?;
+        self.try_save_tools_config().await;
         self.refresh_subagent_security().await;
-        Ok(())
     }
 
     /// Disable a specific tool.
-    pub async fn disable_tool(&self, name: &str) -> Result<()> {
+    ///
+    /// Best-effort persistence (see [`set_disabled_tools`](Self::set_disabled_tools)).
+    pub async fn disable_tool(&self, name: &str) {
         {
             let mut config = self.config.write().await;
             if !config.tools.disabled.contains(&name.to_string()) {
                 config.tools.disabled.push(name.to_string());
             }
         }
-        self.save_tools_config().await?;
+        self.try_save_tools_config().await;
         self.refresh_subagent_security().await;
-        Ok(())
     }
 
     /// Get the proxy setting for a specific tool.
@@ -166,18 +167,35 @@ impl ForgeSDK {
 
     /// Set the preferred web search provider.
     pub async fn set_search_provider(&self, provider: Option<String>) -> Result<()> {
-        {
+        let (configured_provider, proxy) = {
             let mut config = self.config.write().await;
             config.tools.search_provider =
                 provider.map(|p| p.trim().to_string()).filter(|s| !s.is_empty());
-        }
+            (config.tools.search_provider.clone(), config.tools.proxy.clone())
+        };
+
+        // Apply immediately for subsequent tool calls in this process.
+        self.register_tool(Arc::new(
+            forge_tools::builtin::web_search::WebSearchTool::from_settings(
+                configured_provider.as_deref(),
+                Some(&proxy),
+            ),
+        ))
+        .await;
+
         self.save_tools_config().await
     }
-
     /// Save tools configuration to disk.
     async fn save_tools_config(&self) -> Result<()> {
         let config_path = forge_infra::config_dir().join("config.toml");
         self.save_tools_config_to_path(&config_path).await
+    }
+
+    /// Best-effort save: logs a warning on failure instead of propagating.
+    async fn try_save_tools_config(&self) {
+        if let Err(e) = self.save_tools_config().await {
+            tracing::warn!("Failed to persist tools config (in-memory state is still valid): {e}");
+        }
     }
 
     pub(super) async fn save_tools_config_to_path(
@@ -265,6 +283,7 @@ impl ForgeSDK {
             Some(self.background_manager.clone()),
             working_dir,
             subagent_config.max_concurrent,
+            self.task_tool_allowed_subagents.clone(),
         ));
         self.tool_registry.write().await.register(task_tool);
         Ok(())

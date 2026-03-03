@@ -5,11 +5,13 @@ description = "Orchestrates tasks by delegating to sub-agents"
 system_prompt_file = "prompts/personas/commander.md"
 
 [tools]
-include = ["task", "ask_user", "batch", "todo"]
+include = ["task", "ask_user", "batch", "todo_write"]
 
 [subagents]
 enabled = ["explore", "plan", "research", "general", "writer", "analyst"]
 
 [options]
 max_iterations = 100
-bash_readonly = true
+
+[templates]
+enabled = ["error_recovery"]

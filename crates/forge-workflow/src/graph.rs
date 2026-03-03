@@ -122,19 +122,19 @@ impl Graph {
     }
 
     /// 获取图 ID
-    #[must_use] 
+    #[must_use]
     pub fn id(&self) -> &str {
         &self.id
     }
 
     /// 获取图名称
-    #[must_use] 
+    #[must_use]
     pub fn name(&self) -> &str {
         &self.name
     }
 
     /// 获取元数据
-    #[must_use] 
+    #[must_use]
     pub const fn metadata(&self) -> &GraphMetadata {
         &self.metadata
     }
@@ -220,7 +220,7 @@ impl Graph {
     }
 
     /// 获取节点（不可变引用）
-    #[must_use] 
+    #[must_use]
     pub fn get_node(&self, id: &str) -> Option<&Node> {
         self.nodes.get(id)
     }
@@ -231,7 +231,7 @@ impl Graph {
     }
 
     /// 检查节点是否存在
-    #[must_use] 
+    #[must_use]
     pub fn has_node(&self, id: &str) -> bool {
         self.nodes.contains_key(id)
     }
@@ -247,7 +247,7 @@ impl Graph {
     }
 
     /// 获取节点数量
-    #[must_use] 
+    #[must_use]
     pub fn node_count(&self) -> usize {
         self.nodes.len()
     }
@@ -417,7 +417,7 @@ impl Graph {
     }
 
     /// 获取边
-    #[must_use] 
+    #[must_use]
     pub fn get_edge(&self, id: &str) -> Option<&Edge> {
         self.edges.iter().find(|e| e.id == id)
     }
@@ -428,37 +428,37 @@ impl Graph {
     }
 
     /// 获取所有边
-    #[must_use] 
+    #[must_use]
     pub fn edges(&self) -> &[Edge] {
         &self.edges
     }
 
     /// 获取边数量
-    #[must_use] 
+    #[must_use]
     pub fn edge_count(&self) -> usize {
         self.edges.len()
     }
 
     /// 获取节点的出边
-    #[must_use] 
+    #[must_use]
     pub fn outgoing_edges(&self, node_id: &str) -> Vec<&Edge> {
         self.edges.iter().filter(|e| e.source == node_id).collect()
     }
 
     /// 获取节点的入边
-    #[must_use] 
+    #[must_use]
     pub fn incoming_edges(&self, node_id: &str) -> Vec<&Edge> {
         self.edges.iter().filter(|e| e.target == node_id).collect()
     }
 
     /// 检查两个节点之间是否有边
-    #[must_use] 
+    #[must_use]
     pub fn has_edge_between(&self, source: &str, target: &str) -> bool {
         self.edges.iter().any(|e| e.source == source && e.target == target)
     }
 
     /// 获取两个节点之间的边
-    #[must_use] 
+    #[must_use]
     pub fn edges_between(&self, source: &str, target: &str) -> Vec<&Edge> {
         self.edges.iter().filter(|e| e.source == source && e.target == target).collect()
     }
@@ -479,7 +479,8 @@ impl Graph {
             .find(|e| e.id == edge_id)
             .ok_or_else(|| GraphError::EdgeNotFound(edge_id.to_string()))?;
 
-        edge.edge_type = condition.map_or(EdgeType::Direct, |c| EdgeType::Conditional { condition: c });
+        edge.edge_type =
+            condition.map_or(EdgeType::Direct, |c| EdgeType::Conditional { condition: c });
 
         Ok(())
     }
@@ -560,13 +561,13 @@ impl Graph {
     }
 
     /// 获取入口点
-    #[must_use] 
+    #[must_use]
     pub fn entry_point(&self) -> Option<&str> {
         self.entry_point.as_deref()
     }
 
     /// 获取结束节点（无出边的节点）
-    #[must_use] 
+    #[must_use]
     pub fn end_nodes(&self) -> Vec<&str> {
         self.nodes
             .keys()
@@ -576,7 +577,7 @@ impl Graph {
     }
 
     /// 检查节点是否为结束节点
-    #[must_use] 
+    #[must_use]
     pub fn is_end_node(&self, node_id: &str) -> bool {
         self.outgoing_edges(node_id).is_empty()
     }
@@ -603,7 +604,7 @@ impl Graph {
     }
 
     /// 获取节点位置
-    #[must_use] 
+    #[must_use]
     pub fn get_node_position(&self, node_id: &str) -> Option<&Position> {
         self.nodes.get(node_id)?.position.as_ref()
     }

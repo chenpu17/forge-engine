@@ -14,9 +14,7 @@ type Result<T> = std::result::Result<T, ToolError>;
 /// # Errors
 /// Returns `ToolError::InvalidParams` if the parameter is missing or not a string
 pub fn required_str<'a>(params: &'a Value, key: &str) -> Result<&'a str> {
-    params[key]
-        .as_str()
-        .ok_or_else(|| ToolError::InvalidParams(format!("{key} is required")))
+    params[key].as_str().ok_or_else(|| ToolError::InvalidParams(format!("{key} is required")))
 }
 
 /// Extract an optional string parameter

@@ -3,8 +3,8 @@
 //! Provides a high-level client for interacting with MCP servers.
 
 use crate::transport::{
-    AuthHeader, McpTransport, ProxyConfig, SseTransport, StdioTransport,
-    StreamableHttpTransport, TransportError,
+    AuthHeader, McpTransport, ProxyConfig, SseTransport, StdioTransport, StreamableHttpTransport,
+    TransportError,
 };
 use crate::types::{
     methods, ClientCapabilities, ClientInfo, InitializeParams, InitializeResult, JsonRpcError,
@@ -116,7 +116,12 @@ impl Default for McpClientConfig {
 impl McpClientConfig {
     /// Create a new config for a stdio MCP server.
     pub fn stdio(command: impl Into<String>, args: Vec<String>) -> Self {
-        Self { transport_type: McpTransportType::Stdio, command: command.into(), args, ..Default::default() }
+        Self {
+            transport_type: McpTransportType::Stdio,
+            command: command.into(),
+            args,
+            ..Default::default()
+        }
     }
 
     /// Create a new config for a stdio MCP server with environment variables.
@@ -209,7 +214,13 @@ impl McpClient {
     /// Create a new MCP client.
     #[must_use]
     pub fn new(config: McpClientConfig) -> Self {
-        Self { config, transport: None, state: ClientState::Disconnected, server_info: None, cached_tools: None }
+        Self {
+            config,
+            transport: None,
+            state: ClientState::Disconnected,
+            server_info: None,
+            cached_tools: None,
+        }
     }
 
     /// Connect to the MCP server.
@@ -223,7 +234,8 @@ impl McpClient {
 
         let transport: Box<dyn McpTransport> = match self.config.transport_type {
             McpTransportType::Stdio => {
-                let args: Vec<&str> = self.config.args.iter().map(std::string::String::as_str).collect();
+                let args: Vec<&str> =
+                    self.config.args.iter().map(std::string::String::as_str).collect();
                 let transport =
                     StdioTransport::new_with_env(&self.config.command, &args, &self.config.env)?;
                 Box::new(transport)

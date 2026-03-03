@@ -98,7 +98,7 @@ pub struct MemoryCheckpointStore {
 
 impl MemoryCheckpointStore {
     /// 创建新的内存存储
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -132,10 +132,7 @@ impl CheckpointStore for MemoryCheckpointStore {
     }
 
     async fn delete(&self, id: &str) -> Result<(), CheckpointError> {
-        self.checkpoints
-            .write()
-            .map_err(|e| CheckpointError::IoError(e.to_string()))?
-            .remove(id);
+        self.checkpoints.write().map_err(|e| CheckpointError::IoError(e.to_string()))?.remove(id);
         Ok(())
     }
 }

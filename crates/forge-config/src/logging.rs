@@ -25,11 +25,6 @@ pub struct LoggingConfig {
 
 impl Default for LoggingConfig {
     fn default() -> Self {
-        Self {
-            level: default_log_level(),
-            file: None,
-            console: false,
-            json: false,
-        }
+        Self { level: default_log_level(), file: None, console: false, json: false }
     }
 }

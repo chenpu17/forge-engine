@@ -4,15 +4,16 @@
 //! sub-agents for handling complex tasks. Each sub-agent type has its own
 //! tool configuration and system prompt.
 
-use crate::{
-    AgentConfig, GenerationConfig,
-    LoopProtectionConfig, ReflectionConfig,
-};
 use crate::core_loop::CoreAgent;
 use crate::executor::ToolExecutor;
+use crate::{AgentConfig, GenerationConfig, LoopProtectionConfig, ReflectionConfig};
 use async_trait::async_trait;
 use forge_config::SubAgentLlmConfig;
 use forge_domain::AgentEvent;
+use forge_domain::{
+    AgentOutput, AnalysisOutput, ExploreOutput, GeneralOutput, PlanOutput, ResearchOutput,
+    WriterOutput,
+};
 use forge_llm::{LlmProvider, ProviderRegistry};
 use forge_tools::builtin::task::{
     ModelTier, SubAgentType, TaskExecutionError, TaskExecutionReport, TaskExecutor, TaskInstance,
@@ -45,6 +46,8 @@ pub struct SubAgentSecurity {
     pub bash_readonly: bool,
     /// Disabled tools from config/persona
     pub disabled_tools: Vec<String>,
+    /// Enabled sub-agent types. `None` means all types are allowed.
+    pub enabled_subagents: Option<Vec<String>>,
 }
 
 impl SubAgentConfig {
@@ -176,6 +179,8 @@ pub struct RealTaskExecutor {
     security: Arc<RwLock<SubAgentSecurity>>,
     /// Permission policy rules inherited from parent SDK config.
     permission_rules: Vec<forge_config::PermissionRuleConfig>,
+    /// Whether trace recording is enabled (inherited from parent).
+    trace_recording: bool,
 }
 
 impl RealTaskExecutor {
@@ -222,7 +227,7 @@ impl RealTaskExecutor {
             model,
             SubAgentLlmConfig::default(),
             plan_mode_flag,
-            Arc::new(RwLock::new(SubAgentSecurity { bash_readonly, disabled_tools: Vec::new() })),
+            Arc::new(RwLock::new(SubAgentSecurity { bash_readonly, disabled_tools: Vec::new(), enabled_subagents: None })),
             vec![],
         )
     }
@@ -274,7 +279,15 @@ impl RealTaskExecutor {
             plan_mode_flag,
             security,
             permission_rules,
+            trace_recording: false,
         }
+    }
+
+    /// Enable trace recording for sub-agents.
+    #[must_use]
+    pub const fn with_trace_recording(mut self, enabled: bool) -> Self {
+        self.trace_recording = enabled;
+        self
     }
 
     /// Resolve the model to use based on the model tier
@@ -337,10 +350,27 @@ impl RealTaskExecutor {
         let model = self.resolve_model(task.model_tier);
 
         // Read security settings
-        let (bash_readonly, disabled_tools) = {
+        let (bash_readonly, disabled_tools, enabled_subagents) = {
             let sec = self.security.read();
-            (sec.bash_readonly, sec.disabled_tools.clone())
+            (sec.bash_readonly, sec.disabled_tools.clone(), sec.enabled_subagents.clone())
         };
+
+        // Enforce subagent type restrictions
+        if let Some(ref allowed) = enabled_subagents {
+            let is_allowed = allowed.iter().any(|a| {
+                SubAgentType::from_str(a).is_some_and(|t| t == task.subagent_type)
+            });
+            if !is_allowed {
+                return Err(TaskExecutionError::new(
+                    format!(
+                        "Sub-agent type '{}' is not enabled for the current persona. Allowed: {allowed:?}",
+                        task.subagent_type
+                    ),
+                    0,
+                    0,
+                ));
+            }
+        }
 
         // Create filtered registry
         let filtered_registry =
@@ -396,24 +426,21 @@ impl RealTaskExecutor {
             permission_rules: self.permission_rules.clone(),
             session_id: None,
             verifier: crate::VerifierConfig::default(),
-            experimental: crate::ExperimentalAgentConfig::default(),
+            experimental: crate::ExperimentalAgentConfig {
+                trace_recording: self.trace_recording,
+                ..crate::ExperimentalAgentConfig::default()
+            },
         };
 
         // Resolve provider for the chosen model
-        let provider = self
-            .provider_registry
-            .get_for_model(&model)
-            .ok_or_else(|| {
-                TaskExecutionError::new(
-                    format!("No provider found for model '{model}'"),
-                    0,
-                    0,
-                )
-            })?;
+        let provider = self.provider_registry.get_for_model(&model).ok_or_else(|| {
+            TaskExecutionError::new(format!("No provider found for model '{model}'"), 0, 0)
+        })?;
 
         let agent = CoreAgent::new(provider, executor, agent_config);
 
         // Execute the sub-agent
+        let exec_start = std::time::Instant::now();
         let mut stream = agent.process(&task.prompt).map_err(|e| {
             TaskExecutionError::new(format!("Failed to start sub-agent: {e}"), 0, 0)
         })?;
@@ -421,6 +448,7 @@ impl RealTaskExecutor {
         let mut full_response = String::new();
         let mut total_tokens = 0usize;
         let mut tool_call_count = 0usize;
+        let mut sub_trace_id: Option<String> = None;
 
         loop {
             // Check cancellation
@@ -445,15 +473,14 @@ impl RealTaskExecutor {
                 Some(Ok(AgentEvent::TokenUsage { input_tokens, output_tokens, .. })) => {
                     total_tokens += input_tokens + output_tokens;
                 }
+                Some(Ok(AgentEvent::TraceRecorded { trace_id })) => {
+                    sub_trace_id = Some(trace_id);
+                }
                 Some(Ok(AgentEvent::Done { .. })) => {
                     break;
                 }
                 Some(Ok(AgentEvent::Error { message })) => {
-                    return Err(TaskExecutionError::new(
-                        message,
-                        total_tokens,
-                        tool_call_count,
-                    ));
+                    return Err(TaskExecutionError::new(message, total_tokens, tool_call_count));
                 }
                 Some(Err(e)) => {
                     return Err(TaskExecutionError::new(
@@ -471,11 +498,55 @@ impl RealTaskExecutor {
             full_response = "[Sub-agent completed without text output]".to_string();
         }
 
+        // Try to parse structured output from the response
+        let (structured, schema_version) =
+            try_parse_structured_output(task.subagent_type, &full_response);
+
         Ok(TaskExecutionReport {
             output: full_response,
             tokens_used: total_tokens,
             tool_calls: tool_call_count,
+            sub_trace_id,
+            structured,
+            schema_version,
+            duration_ms: u64::try_from(exec_start.elapsed().as_millis()).unwrap_or(u64::MAX),
+            model,
         })
+    }
+}
+
+/// Attempt to parse structured output from a sub-agent's response text.
+///
+/// Tries the appropriate output type based on the agent type. Returns
+/// `(Some(json_value), Some(schema_version))` on success, or `(None, None)`
+/// if parsing fails (graceful degradation — the plain text output is kept).
+fn try_parse_structured_output(
+    agent_type: SubAgentType,
+    text: &str,
+) -> (Option<serde_json::Value>, Option<u16>) {
+    match agent_type {
+        SubAgentType::Explore => try_parse_and_convert::<ExploreOutput>(text),
+        SubAgentType::Plan => try_parse_and_convert::<PlanOutput>(text),
+        SubAgentType::Research => try_parse_and_convert::<ResearchOutput>(text),
+        SubAgentType::DataAnalyst => try_parse_and_convert::<AnalysisOutput>(text),
+        SubAgentType::GeneralPurpose => try_parse_and_convert::<GeneralOutput>(text),
+        SubAgentType::Writer => try_parse_and_convert::<WriterOutput>(text),
+    }
+}
+
+/// Generic helper: try to parse text as `T`, then convert to JSON value.
+fn try_parse_and_convert<T: AgentOutput>(text: &str) -> (Option<serde_json::Value>, Option<u16>) {
+    match forge_domain::try_parse_output::<T>(text) {
+        Some(output) => {
+            match serde_json::to_value(&output) {
+                Ok(val) => (Some(val), Some(T::SCHEMA_VERSION)),
+                Err(e) => {
+                    tracing::warn!("Failed to serialize structured output: {e}");
+                    (None, None)
+                }
+            }
+        }
+        None => (None, None),
     }
 }
 

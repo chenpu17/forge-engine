@@ -108,22 +108,18 @@ impl ProcessManager {
                 }
                 KillTreeResult::Success
             }
-            Err(Errno::ESRCH) => {
-                match kill(pid_t, Signal::SIGTERM) {
-                    Ok(()) => {
-                        tokio::time::sleep(Duration::from_millis(100)).await;
-                        if Self::is_process_alive(pid).await {
-                            let _ = kill(pid_t, Signal::SIGKILL);
-                        }
-                        KillTreeResult::Success
+            Err(Errno::ESRCH) => match kill(pid_t, Signal::SIGTERM) {
+                Ok(()) => {
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    if Self::is_process_alive(pid).await {
+                        let _ = kill(pid_t, Signal::SIGKILL);
                     }
-                    Err(Errno::ESRCH) => KillTreeResult::Success,
-                    Err(Errno::EPERM) => {
-                        KillTreeResult::PermissionDenied("Permission denied".into())
-                    }
-                    Err(e) => KillTreeResult::Error(e.to_string()),
+                    KillTreeResult::Success
                 }
-            }
+                Err(Errno::ESRCH) => KillTreeResult::Success,
+                Err(Errno::EPERM) => KillTreeResult::PermissionDenied("Permission denied".into()),
+                Err(e) => KillTreeResult::Error(e.to_string()),
+            },
             Err(Errno::EPERM) => KillTreeResult::PermissionDenied("Permission denied".into()),
             Err(e) => KillTreeResult::Error(e.to_string()),
         }
@@ -147,15 +143,11 @@ impl ProcessManager {
 
         match killpg(pid_t, Signal::SIGKILL) {
             Ok(()) => KillTreeResult::Success,
-            Err(Errno::ESRCH) => {
-                match kill(pid_t, Signal::SIGKILL) {
-                    Ok(()) | Err(Errno::ESRCH) => KillTreeResult::Success,
-                    Err(Errno::EPERM) => {
-                        KillTreeResult::PermissionDenied("Permission denied".into())
-                    }
-                    Err(e) => KillTreeResult::Error(e.to_string()),
-                }
-            }
+            Err(Errno::ESRCH) => match kill(pid_t, Signal::SIGKILL) {
+                Ok(()) | Err(Errno::ESRCH) => KillTreeResult::Success,
+                Err(Errno::EPERM) => KillTreeResult::PermissionDenied("Permission denied".into()),
+                Err(e) => KillTreeResult::Error(e.to_string()),
+            },
             Err(Errno::EPERM) => KillTreeResult::PermissionDenied("Permission denied".into()),
             Err(e) => KillTreeResult::Error(e.to_string()),
         }

@@ -118,10 +118,7 @@ impl ForgeError {
                 );
             }
             if let Self::SessionBusy { session_id, inflight_request_id } = self {
-                obj.insert(
-                    "session_id".to_string(),
-                    serde_json::Value::String(session_id.clone()),
-                );
+                obj.insert("session_id".to_string(), serde_json::Value::String(session_id.clone()));
                 obj.insert(
                     "inflight_request_id".to_string(),
                     serde_json::Value::String(inflight_request_id.clone()),
@@ -183,11 +180,8 @@ mod tests {
         assert_eq!(ForgeError::PersonaNotFound("p".into()).code(), "persona_not_found");
         assert_eq!(ForgeError::StorageError("s".into()).code(), "storage_error");
         assert_eq!(
-            ForgeError::SessionBusy {
-                session_id: "s1".into(),
-                inflight_request_id: "r1".into(),
-            }
-            .code(),
+            ForgeError::SessionBusy { session_id: "s1".into(), inflight_request_id: "r1".into() }
+                .code(),
             "session_busy"
         );
     }
@@ -200,10 +194,8 @@ mod tests {
         let err = ForgeError::SessionNotFound("abc".into());
         assert_eq!(err.to_string(), "Session not found: abc");
 
-        let err = ForgeError::SessionBusy {
-            session_id: "s1".into(),
-            inflight_request_id: "r1".into(),
-        };
+        let err =
+            ForgeError::SessionBusy { session_id: "s1".into(), inflight_request_id: "r1".into() };
         assert!(err.to_string().contains("s1"));
         assert!(err.to_string().contains("r1"));
     }
@@ -230,10 +222,8 @@ mod tests {
 
     #[test]
     fn test_retryable_session_busy() {
-        let err = ForgeError::SessionBusy {
-            session_id: "s".into(),
-            inflight_request_id: "r".into(),
-        };
+        let err =
+            ForgeError::SessionBusy { session_id: "s".into(), inflight_request_id: "r".into() };
         assert!(err.is_retryable());
     }
 

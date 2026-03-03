@@ -13,7 +13,7 @@ Launch sub-agents to handle complex, multi-step tasks autonomously.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| task_type | string | Yes | Type of sub-agent to spawn |
+| subagent_type | string | Yes | Type of sub-agent to spawn |
 | prompt | string | Yes | The task description for the sub-agent |
 
 ## Sub-Agent Types
@@ -24,11 +24,15 @@ Launch sub-agents to handle complex, multi-step tasks autonomously.
 | plan | Design implementation plans | Architecture decisions, planning |
 | research | In-depth research | Complex questions, documentation |
 | general | General purpose | Multi-step tasks, complex searches |
+| writer | Content creation and writing | Documents, reports, proposals |
+| analyst | Data analysis and visualization | Statistical analysis, data reports |
 
 ## Best Practices
 
 - Use `explore` for quick file/code searches
 - Use `plan` for designing implementation approaches
+- Use `writer` for content creation and document writing
+- Use `analyst` for data analysis and report generation
 - Provide detailed prompts with clear objectives
 - Sub-agents work independently, no back-and-forth
 
@@ -37,7 +41,7 @@ Launch sub-agents to handle complex, multi-step tasks autonomously.
 Explore project:
 ```json
 {
-  "task_type": "explore",
+  "subagent_type": "explore",
   "prompt": "Find all files that handle user authentication"
 }
 ```
@@ -45,7 +49,7 @@ Explore project:
 Plan implementation:
 ```json
 {
-  "task_type": "plan",
+  "subagent_type": "plan",
   "prompt": "Design an approach to add caching to the API layer"
 }
 ```

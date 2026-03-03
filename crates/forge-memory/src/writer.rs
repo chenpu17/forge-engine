@@ -44,7 +44,7 @@ impl MemoryWriter {
     /// Create a new `MemoryWriter`.
     ///
     /// `user_dir` should be `~/.forge/memory/`.
-    #[must_use] 
+    #[must_use]
     pub const fn new(user_dir: PathBuf) -> Self {
         Self { user_dir }
     }
@@ -75,9 +75,7 @@ impl MemoryWriter {
         static HIGH_RISK_COMPILED: OnceLock<Vec<(regex::Regex, &str)>> = OnceLock::new();
         static BYPASSABLE_COMPILED: OnceLock<Vec<(regex::Regex, &str)>> = OnceLock::new();
 
-        fn compile(
-            patterns: &[(&'static str, &'static str)],
-        ) -> Vec<(regex::Regex, &'static str)> {
+        fn compile(patterns: &[(&'static str, &'static str)]) -> Vec<(regex::Regex, &'static str)> {
             patterns
                 .iter()
                 .filter_map(|(pattern, label)| match regex::Regex::new(pattern) {
@@ -110,18 +108,13 @@ impl MemoryWriter {
     }
 
     /// Verify that a resolved path stays within the scope directory (symlink protection).
-    fn verify_within_scope(
-        file_path: &Path,
-        scope_dir: &Path,
-    ) -> Result<PathBuf, MemoryError> {
+    fn verify_within_scope(file_path: &Path, scope_dir: &Path) -> Result<PathBuf, MemoryError> {
         let canonical_scope = scope_dir.canonicalize().map_err(MemoryError::Io)?;
 
         if file_path.exists() {
             let canonical = file_path.canonicalize().map_err(MemoryError::Io)?;
             if !canonical.starts_with(&canonical_scope) {
-                return Err(MemoryError::path_traversal(
-                    file_path.to_string_lossy().to_string(),
-                ));
+                return Err(MemoryError::path_traversal(file_path.to_string_lossy().to_string()));
             }
             Ok(canonical)
         } else if let Some(parent) = file_path.parent() {
@@ -191,7 +184,8 @@ impl MemoryWriter {
             let yaml_str = &rest[..end];
             let after_fm = &rest[end + 4..];
 
-            let mut lines: Vec<String> = yaml_str.lines().map(std::string::ToString::to_string).collect();
+            let mut lines: Vec<String> =
+                yaml_str.lines().map(std::string::ToString::to_string).collect();
             let mut found_updated = false;
             let mut found_write_count = false;
             let mut write_count: u32 = 0;
@@ -317,11 +311,8 @@ impl MemoryWriter {
         let pending_entry = format!("{path}\n");
         {
             use tokio::io::AsyncWriteExt;
-            let mut file = tokio::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&pending_path)
-                .await?;
+            let mut file =
+                tokio::fs::OpenOptions::new().create(true).append(true).open(&pending_path).await?;
             file.write_all(pending_entry.as_bytes()).await?;
         }
 
@@ -501,11 +492,15 @@ impl MemoryWriter {
                     continue;
                 }
 
-                let rel_path = canonical_file
-                    .strip_prefix(&canonical_scope)
-                    .ok().map_or_else(|| canonical_file.to_string_lossy().to_string(), |p| p.to_string_lossy().to_string());
+                let rel_path = canonical_file.strip_prefix(&canonical_scope).ok().map_or_else(
+                    || canonical_file.to_string_lossy().to_string(),
+                    |p| p.to_string_lossy().to_string(),
+                );
 
-                let content = if let Ok(content) = tokio::fs::read_to_string(&canonical_file).await { content } else {
+                let content = if let Ok(content) = tokio::fs::read_to_string(&canonical_file).await
+                {
+                    content
+                } else {
                     failed.push(rel_path);
                     continue;
                 };
@@ -546,10 +541,7 @@ impl MemoryWriter {
             let is_exact = if after_idx >= line.len() {
                 true
             } else {
-                matches!(
-                    line.as_bytes()[after_idx],
-                    b' ' | b'\t' | b'\n' | b'\r' | b')' | b']'
-                )
+                matches!(line.as_bytes()[after_idx], b' ' | b'\t' | b'\n' | b'\r' | b')' | b']')
             };
 
             if is_exact {
