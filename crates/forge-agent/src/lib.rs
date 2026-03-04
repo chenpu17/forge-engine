@@ -24,8 +24,10 @@ pub mod reflector;
 pub mod skill;
 pub mod skill_context;
 pub mod sub_agent;
+pub mod trace_error;
 pub mod trace_recorder;
 pub mod trace_replayer;
+pub mod trace_writer;
 pub mod verifier;
 
 // The main agent loop is split into focused modules:

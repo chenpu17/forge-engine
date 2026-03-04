@@ -15,6 +15,7 @@ pub mod model;
 pub mod proxy;
 pub mod session;
 pub mod tools;
+pub mod tracing;
 pub mod ui;
 
 pub use cost::{CostConfig, PricingEntry};
@@ -32,6 +33,7 @@ pub use tools::{
     EnvPolicy, EnvPolicyMode, McpSettings, OperationType, PermissionRuleConfig, PolicyAction,
     ToolsConfig, TrustLevelConfig, TrustLevelSetting,
 };
+pub use tracing::TracingConfig;
 pub use ui::UiConfig;
 
 use serde::{Deserialize, Serialize};
@@ -57,6 +59,9 @@ pub struct ForgeConfig {
     /// Cost tracking settings.
     #[serde(default)]
     pub cost: CostConfig,
+    /// Tracing settings.
+    #[serde(default)]
+    pub tracing: TracingConfig,
 }
 
 impl ForgeConfig {

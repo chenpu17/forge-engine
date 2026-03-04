@@ -224,6 +224,109 @@ pub enum AgentEvent {
         /// Trace identifier for linking parent/child traces.
         trace_id: String,
     },
+    /// Session started (tracing).
+    SessionStart {
+        /// Session ID.
+        session_id: String,
+        /// Timestamp (Unix milliseconds).
+        timestamp: i64,
+        /// Session context.
+        context: SessionContext,
+    },
+    /// Session ended (tracing).
+    SessionEnd {
+        /// Session ID.
+        session_id: String,
+        /// Timestamp (Unix milliseconds).
+        timestamp: i64,
+        /// Duration in milliseconds.
+        duration_ms: u64,
+    },
+    /// User message (tracing).
+    UserMessage {
+        /// Message content.
+        content: String,
+        /// Timestamp (Unix milliseconds).
+        timestamp: i64,
+    },
+    /// Assistant message (tracing).
+    AssistantMessage {
+        /// Message content.
+        content: String,
+        /// Timestamp (Unix milliseconds).
+        timestamp: i64,
+    },
+    /// API request started (tracing).
+    ApiRequest {
+        /// Request ID.
+        request_id: String,
+        /// Model name.
+        model: String,
+        /// Timestamp (Unix milliseconds).
+        timestamp: i64,
+    },
+    /// API response received (tracing).
+    ApiResponse {
+        /// Request ID.
+        request_id: String,
+        /// Duration in milliseconds.
+        duration_ms: u64,
+        /// Input tokens.
+        input_tokens: u32,
+        /// Output tokens.
+        output_tokens: u32,
+        /// Cache read tokens.
+        cache_read_tokens: Option<u32>,
+        /// Cache write tokens.
+        cache_write_tokens: Option<u32>,
+        /// Timestamp (Unix milliseconds).
+        timestamp: i64,
+    },
+    /// API error (tracing).
+    ApiError {
+        /// Request ID.
+        request_id: String,
+        /// Error message.
+        error: String,
+        /// Error details.
+        details: Option<String>,
+        /// Timestamp (Unix milliseconds).
+        timestamp: i64,
+    },
+    /// Tool result with full details (tracing).
+    ToolResultDetailed {
+        /// Tool call ID.
+        id: String,
+        /// Output content.
+        output: serde_json::Value,
+        /// Error message if failed.
+        error: Option<String>,
+        /// Duration in milliseconds.
+        duration_ms: u64,
+        /// Timestamp (Unix milliseconds).
+        timestamp: i64,
+    },
+}
+
+// ---------------------------------------------------------------------------
+// Tool call / result
+// ---------------------------------------------------------------------------
+
+/// Session context information (tracing).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionContext {
+    /// Engine version.
+    pub engine_version: String,
+    /// Working directory.
+    pub working_dir: String,
+    /// Git branch.
+    pub git_branch: Option<String>,
+    /// Git commit.
+    pub git_commit: Option<String>,
+    /// Model name.
+    pub model: String,
+    /// Config summary.
+    pub config_summary: serde_json::Value,
 }
 
 // ---------------------------------------------------------------------------

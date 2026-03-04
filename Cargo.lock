@@ -526,6 +526,7 @@ dependencies = [
 name = "forge-config"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "config",
  "dirs",
  "forge-domain",
@@ -533,6 +534,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror",
+ "tokio",
  "toml",
 ]
 
