@@ -483,10 +483,10 @@ async fn run_agent_loop(
 
         // Record user message
         if let Some(writer) = &trace_writer {
-            if let Err(e) = writer.record(forge_domain::AgentEvent::UserMessage {
+            if let Err(e) = writer.record_async(forge_domain::AgentEvent::UserMessage {
                 content: initial_query.clone(),
                 timestamp: chrono::Utc::now().timestamp_millis(),
-            }) {
+            }).await {
                 tracing::warn!("Failed to record UserMessage: {}", e);
             }
         }
@@ -655,10 +655,10 @@ async fn run_agent_loop(
                         }).collect::<Vec<_>>().join("\n")
                     }
                 };
-                if let Err(e) = writer.record(forge_domain::AgentEvent::AssistantMessage {
+                if let Err(e) = writer.record_async(forge_domain::AgentEvent::AssistantMessage {
                     content: text_content,
                     timestamp: chrono::Utc::now().timestamp_millis(),
-                }) {
+                }).await {
                     tracing::warn!("Failed to record AssistantMessage: {}", e);
                 }
             }

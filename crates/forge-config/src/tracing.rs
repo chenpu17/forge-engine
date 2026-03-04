@@ -9,7 +9,7 @@ fn default_true() -> bool {
 
 fn default_trace_dir() -> PathBuf {
     dirs::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
+        .expect("Failed to determine local data directory")
         .join("forge")
         .join("traces")
 }
@@ -84,10 +84,14 @@ impl Default for TracingConfig {
 impl TracingConfig {
     /// Generate output file path for a session.
     pub fn generate_path(&self, session_id: &str) -> PathBuf {
+        let sanitized = session_id
+            .chars()
+            .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
+            .collect::<String>();
         let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
         let filename = self
             .filename_template
-            .replace("{session_id}", session_id)
+            .replace("{session_id}", &sanitized)
             .replace("{timestamp}", &timestamp.to_string());
         self.output_dir.join(filename)
     }

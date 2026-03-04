@@ -2,6 +2,7 @@
 
 use forge_domain::AgentEvent;
 use std::path::PathBuf;
+use std::time::Duration;
 use tokio::fs::{File, OpenOptions};
 use tokio::io::AsyncWriteExt;
 use tokio::sync::{mpsc, oneshot};
@@ -19,7 +20,7 @@ enum TraceWriterMessage {
 /// Asynchronous trace writer.
 pub struct TraceWriter {
     /// Send channel.
-    tx: mpsc::Sender<TraceWriterMessage>,
+    tx: Option<mpsc::Sender<TraceWriterMessage>>,
     /// Output file path.
     output_path: PathBuf,
     /// Background task handle.
@@ -91,6 +92,7 @@ impl TraceWriter {
                                     }
                                 }
                                 let _ = file.flush().await;
+                                let _ = file.shutdown().await;
                                 break;
                             }
                         }
@@ -99,12 +101,14 @@ impl TraceWriter {
             }
         });
 
-        Ok(Self { tx, output_path, task_handle: Some(task_handle) })
+        Ok(Self { tx: Some(tx), output_path, task_handle: Some(task_handle) })
     }
 
     /// Record an event (non-blocking).
     pub fn record(&self, event: AgentEvent) -> Result<()> {
         self.tx
+            .as_ref()
+            .ok_or(TraceError::ChannelClosed)?
             .try_send(TraceWriterMessage::Event(event))
             .map_err(|e| match e {
                 mpsc::error::TrySendError::Full(_) => TraceError::ChannelFull,
@@ -115,6 +119,8 @@ impl TraceWriter {
     /// Record an event (blocking, waits if channel is full).
     pub async fn record_async(&self, event: AgentEvent) -> Result<()> {
         self.tx
+            .as_ref()
+            .ok_or(TraceError::ChannelClosed)?
             .send(TraceWriterMessage::Event(event))
             .await
             .map_err(|_| TraceError::ChannelClosed)
@@ -129,16 +135,24 @@ impl TraceWriter {
     pub async fn flush(&self) -> Result<()> {
         let (tx, rx) = oneshot::channel();
         self.tx
+            .as_ref()
+            .ok_or(TraceError::ChannelClosed)?
             .send(TraceWriterMessage::Flush(tx))
             .await
             .map_err(|_| TraceError::ChannelClosed)?;
-        rx.await.map_err(|_| TraceError::ChannelClosed)?;
+        tokio::time::timeout(Duration::from_secs(5), rx)
+            .await
+            .map_err(|_| TraceError::IoError(std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                "Flush timeout"
+            )))?
+            .map_err(|_| TraceError::ChannelClosed)?;
         Ok(())
     }
 
     /// Shutdown writer and wait for background task to complete.
     pub async fn shutdown(mut self) -> Result<()> {
-        drop(self.tx);
+        drop(self.tx.take());
         if let Some(handle) = self.task_handle.take() {
             handle.await.map_err(|_| TraceError::ChannelClosed)?;
         }
@@ -146,9 +160,17 @@ impl TraceWriter {
     }
 }
 
+impl Drop for TraceWriter {
+    fn drop(&mut self) {
+        if let Some(handle) = self.task_handle.take() {
+            handle.abort();
+        }
+    }
+}
+
 /// Write a batch of events to file.
 async fn write_batch(file: &mut File, events: &[AgentEvent]) -> std::io::Result<()> {
-    let mut buffer = String::new();
+    let mut buffer = String::with_capacity(events.len() * 256);
     for event in events {
         match serde_json::to_string(event) {
             Ok(json) => {
@@ -156,7 +178,8 @@ async fn write_batch(file: &mut File, events: &[AgentEvent]) -> std::io::Result<
                 buffer.push('\n');
             }
             Err(e) => {
-                eprintln!("Failed to serialize event: {}", e);
+                let error_msg = format!("{{\"type\":\"serialization_error\",\"error\":\"{}\"}}\n", e);
+                buffer.push_str(&error_msg);
             }
         }
     }
