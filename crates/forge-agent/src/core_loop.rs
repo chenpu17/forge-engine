@@ -365,13 +365,6 @@ async fn run_agent_loop(
         VerifierPipeline::new(config.verifier.clone(), config.experimental.verifier_pipeline);
     let mut verifier_stats = VerifierStats::default();
 
-    // Record user message
-    if let Some(writer) = &trace_writer {
-        let _ = writer.record(forge_domain::AgentEvent::UserMessage {
-            content: initial_query.clone(),
-            timestamp: chrono::Utc::now().timestamp_millis(),
-        });
-    }
     let episodic_store =
         config.experimental.episodic_memory.then(|| EpisodicMemoryStore::new(&config.working_dir));
     let context_fingerprint = build_context_fingerprint(&config);
@@ -487,6 +480,16 @@ async fn run_agent_loop(
             role: ChatRole::User,
             content: MessageContent::Text(initial_query.clone()),
         });
+
+        // Record user message
+        if let Some(writer) = &trace_writer {
+            if let Err(e) = writer.record(forge_domain::AgentEvent::UserMessage {
+                content: initial_query.clone(),
+                timestamp: chrono::Utc::now().timestamp_millis(),
+            }) {
+                tracing::warn!("Failed to record UserMessage: {}", e);
+            }
+        }
     }
 
     // ---------------------------------------------------------------------------
