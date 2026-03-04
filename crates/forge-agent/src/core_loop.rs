@@ -18,6 +18,7 @@ use crate::{
         MAX_REJECTED_ENTRIES, REJECTION_TTL,
     },
     trace_recorder::TraceRecorder,
+    trace_writer::TraceWriter,
     verifier::{VerifierPipeline, VerifierStats},
     AgentConfig, AgentError, ConfirmationHandler, Result,
 };
@@ -114,6 +115,8 @@ pub struct CoreAgent {
     cancellation: Arc<Mutex<CancellationToken>>,
     /// Running state
     is_running: Arc<AtomicBool>,
+    /// Trace writer (optional)
+    trace_writer: Option<Arc<TraceWriter>>,
 }
 
 impl CoreAgent {
@@ -152,7 +155,15 @@ impl CoreAgent {
             permission_manager: Arc::new(Mutex::new(permission_manager)),
             cancellation: Arc::new(Mutex::new(CancellationToken::new())),
             is_running: Arc::new(AtomicBool::new(false)),
+            trace_writer: None,
         }
+    }
+
+    /// Set the trace writer
+    #[must_use]
+    pub fn with_trace_writer(mut self, writer: Arc<TraceWriter>) -> Self {
+        self.trace_writer = Some(writer);
+        self
     }
 
     /// Set the confirmation handler
@@ -219,6 +230,7 @@ impl CoreAgent {
         let prompt_manager = self.prompt_manager.clone();
         let confirmation_handler = self.confirmation_handler.clone();
         let permission_manager = self.permission_manager.clone();
+        let trace_writer = self.trace_writer.clone();
         let query = query.to_string();
         let history = history.to_vec();
         // Spawn the agent loop
@@ -236,6 +248,7 @@ impl CoreAgent {
                     history,
                     tx.clone(),
                     cancellation,
+                    trace_writer,
                 ))
                 .await;
 
@@ -303,6 +316,7 @@ async fn run_agent_loop(
     history: Vec<HistoryMessage>,
     tx: mpsc::Sender<Result<AgentEvent>>,
     cancellation: CancellationToken,
+    trace_writer: Option<Arc<TraceWriter>>,
 ) -> Result<()> {
     // Wrap provider with retry/timeout middleware
     let iteration_timeout =
@@ -350,6 +364,14 @@ async fn run_agent_loop(
     let verifier =
         VerifierPipeline::new(config.verifier.clone(), config.experimental.verifier_pipeline);
     let mut verifier_stats = VerifierStats::default();
+
+    // Record user message
+    if let Some(writer) = &trace_writer {
+        let _ = writer.record(forge_domain::AgentEvent::UserMessage {
+            content: initial_query.clone(),
+            timestamp: chrono::Utc::now().timestamp_millis(),
+        });
+    }
     let episodic_store =
         config.experimental.episodic_memory.then(|| EpisodicMemoryStore::new(&config.working_dir));
     let context_fingerprint = build_context_fingerprint(&config);

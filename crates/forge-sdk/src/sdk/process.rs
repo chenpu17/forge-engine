@@ -291,13 +291,17 @@ impl ForgeSDK {
         };
 
         let pm = self.prompt_manager.read().await;
-        let agent = CoreAgent::with_prompt_manager(
+        let mut agent = CoreAgent::with_prompt_manager(
             provider,
             executor,
             agent_config,
             Arc::new((*pm).clone()),
         )
         .with_confirmation_handler(confirmation_handler);
+
+        if let Some(writer) = &self.trace_writer {
+            agent = agent.with_trace_writer(Arc::clone(writer));
+        }
 
         let token = agent.cancellation_token();
         self.reserve_session_request_slot(&request_key, token).await?;
@@ -536,13 +540,17 @@ impl ForgeSDK {
         };
 
         let pm = self.prompt_manager.read().await;
-        let agent = CoreAgent::with_prompt_manager(
+        let mut agent = CoreAgent::with_prompt_manager(
             provider,
             executor,
             agent_config,
             Arc::new((*pm).clone()),
         )
         .with_confirmation_handler(confirmation_handler);
+
+        if let Some(writer) = &self.trace_writer {
+            agent = agent.with_trace_writer(Arc::clone(writer));
+        }
 
         let token = agent.cancellation_token();
         self.reserve_session_request_slot(&request_key, token).await?;
@@ -728,13 +736,17 @@ impl ForgeSDK {
         };
 
         let pm = self.prompt_manager.read().await;
-        let agent = CoreAgent::with_prompt_manager(
+        let mut agent = CoreAgent::with_prompt_manager(
             provider,
             executor,
             agent_config,
             Arc::new((*pm).clone()),
         )
         .with_confirmation_handler(confirmation_handler);
+
+        if let Some(writer) = &self.trace_writer {
+            agent = agent.with_trace_writer(Arc::clone(writer));
+        }
 
         let token = agent.cancellation_token();
         self.reserve_session_request_slot(&request_key, token).await?;
