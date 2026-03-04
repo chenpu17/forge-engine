@@ -31,6 +31,9 @@ pub struct ForgeConfig {
     /// Observability settings (OpenTelemetry export)
     #[serde(default)]
     pub observability: ObservabilityConfig,
+    /// Tracing settings (session recording)
+    #[serde(default)]
+    pub tracing: forge_config::TracingConfig,
 }
 
 impl Default for ForgeConfig {
@@ -45,6 +48,7 @@ impl Default for ForgeConfig {
             project_prompt: None,
             trust_project_skills: false,
             observability: ObservabilityConfig::default(),
+            tracing: forge_config::TracingConfig::default(),
         }
     }
 }

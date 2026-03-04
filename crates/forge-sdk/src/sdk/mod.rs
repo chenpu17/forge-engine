@@ -29,6 +29,7 @@ use forge_agent::{
     AgentConfig, CancellationToken, ConfirmationHandler, ConfirmationLevel, CoreAgent,
     HistoryMessage, RealTaskExecutor, SubAgentSecurity, ToolExecutor,
 };
+use forge_domain::event::SessionContext;
 use forge_llm::{ChatMessage, ChatRole, LlmConfig, LlmEvent, MessageContent, ProviderRegistry};
 use forge_mcp::security::McpSecurity;
 use forge_mcp::{McpConfig, McpManager, McpTransportType as ToolsTransportType};
@@ -166,6 +167,12 @@ pub struct ForgeSDK {
     pub(crate) config_persist_lock: Arc<tokio::sync::Mutex<()>>,
     /// LSP manager for code intelligence tools.
     pub(crate) lsp_manager: Arc<forge_lsp::LspManager>,
+    /// Trace writer for session recording.
+    pub(crate) trace_writer: Option<Arc<forge_agent::trace_writer::TraceWriter>>,
+    /// Session ID for tracing.
+    pub(crate) session_id: String,
+    /// Session start time.
+    pub(crate) start_time: std::time::Instant,
 }
 
 // ===================================================================
@@ -284,7 +291,50 @@ impl ForgeSDK {
         use_builtin_tools: bool,
         memory_dir: PathBuf,
     ) -> Result<Self> {
-        let sdk = Self::create_sdk_core(config, provider, session_manager, memory_dir)?;
+        let mut sdk = Self::create_sdk_core(config, provider, session_manager, memory_dir)?;
+
+        // Initialize trace writer if enabled
+        if sdk.config.read().await.tracing.enabled {
+            let config_guard = sdk.config.read().await;
+            let tracing_config = &config_guard.tracing;
+
+            // Cleanup old traces
+            let _ = tracing_config.cleanup_old_traces().await;
+
+            let output_path = tracing_config.generate_path(&sdk.session_id);
+
+            match forge_agent::trace_writer::TraceWriter::new(
+                output_path,
+                tracing_config.buffer_size,
+                50, // batch_size
+            ).await {
+                Ok(writer) => {
+                    let writer = Arc::new(writer);
+
+                    // Record SessionStart event
+                    let _ = writer.record(forge_domain::AgentEvent::SessionStart {
+                        session_id: sdk.session_id.clone(),
+                        timestamp: chrono::Utc::now().timestamp_millis(),
+                        context: SessionContext {
+                            engine_version: env!("CARGO_PKG_VERSION").to_string(),
+                            working_dir: config_guard.working_dir.to_string_lossy().to_string(),
+                            git_branch: None,
+                            git_commit: None,
+                            model: config_guard.llm.model.clone(),
+                            config_summary: serde_json::json!({
+                                "model": config_guard.llm.model,
+                                "max_tokens": config_guard.llm.max_tokens,
+                            }),
+                        },
+                    });
+
+                    sdk.trace_writer = Some(writer);
+                }
+                Err(e) => {
+                    eprintln!("Failed to initialize trace writer: {}", e);
+                }
+            }
+        }
 
         if use_builtin_tools {
             sdk.register_builtin_tools().await;
@@ -367,6 +417,9 @@ impl ForgeSDK {
             session_persist_locks: Arc::new(RwLock::new(HashMap::new())),
             config_persist_lock: Arc::new(tokio::sync::Mutex::new(())),
             lsp_manager,
+            trace_writer: None,
+            session_id: Uuid::new_v4().to_string(),
+            start_time: std::time::Instant::now(),
         };
 
         Ok(sdk)
@@ -1462,6 +1515,25 @@ impl SdkConfirmationHandler {
                 });
                 Ok(false)
             }
+        }
+    }
+}
+
+impl Drop for ForgeSDK {
+    fn drop(&mut self) {
+        if let Some(writer) = &self.trace_writer {
+            let session_id = self.session_id.clone();
+            let duration_ms = self.start_time.elapsed().as_millis() as u64;
+            let writer = Arc::clone(writer);
+
+            tokio::spawn(async move {
+                let _ = writer.record(forge_domain::AgentEvent::SessionEnd {
+                    session_id,
+                    timestamp: chrono::Utc::now().timestamp_millis(),
+                    duration_ms,
+                });
+                let _ = writer.flush().await;
+            });
         }
     }
 }
