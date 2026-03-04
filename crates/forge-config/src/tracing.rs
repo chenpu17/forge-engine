@@ -9,7 +9,7 @@ fn default_true() -> bool {
 
 fn default_trace_dir() -> PathBuf {
     dirs::data_local_dir()
-        .expect("Failed to determine local data directory")
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
         .join("forge")
         .join("traces")
 }
@@ -88,6 +88,11 @@ impl TracingConfig {
             .chars()
             .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
             .collect::<String>();
+        let sanitized = if sanitized.is_empty() {
+            "unknown".to_string()
+        } else {
+            sanitized
+        };
         let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
         let filename = self
             .filename_template

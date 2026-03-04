@@ -66,7 +66,7 @@ impl TraceWriter {
                                 // Batch write when buffer is full
                                 if event_buffer.len() >= batch_size {
                                     if let Err(e) = write_batch(&mut file, &event_buffer).await {
-                                        eprintln!("Failed to write trace batch to {:?}: {}", error_path, e);
+                                        tracing::warn!("Failed to write trace batch to {:?}: {}", error_path, e);
                                     }
                                     event_buffer.clear();
                                 }
@@ -75,7 +75,7 @@ impl TraceWriter {
                                 // Write remaining events
                                 if !event_buffer.is_empty() {
                                     if let Err(e) = write_batch(&mut file, &event_buffer).await {
-                                        eprintln!("Failed to write trace batch to {:?}: {}", error_path, e);
+                                        tracing::warn!("Failed to write trace batch to {:?}: {}", error_path, e);
                                     }
                                     event_buffer.clear();
                                 }
@@ -88,7 +88,7 @@ impl TraceWriter {
                                 // Channel closed, write remaining events and exit
                                 if !event_buffer.is_empty() {
                                     if let Err(e) = write_batch(&mut file, &event_buffer).await {
-                                        eprintln!("Failed to write final trace batch to {:?}: {}", error_path, e);
+                                        tracing::warn!("Failed to write final trace batch to {:?}: {}", error_path, e);
                                     }
                                 }
                                 let _ = file.flush().await;
@@ -160,6 +160,10 @@ impl TraceWriter {
     }
 }
 
+/// Drop implementation aborts the background task.
+///
+/// WARNING: This may lose buffered events. Always call `shutdown()` explicitly
+/// to ensure all events are flushed before dropping.
 impl Drop for TraceWriter {
     fn drop(&mut self) {
         if let Some(handle) = self.task_handle.take() {
@@ -178,8 +182,12 @@ async fn write_batch(file: &mut File, events: &[AgentEvent]) -> std::io::Result<
                 buffer.push('\n');
             }
             Err(e) => {
-                let error_msg = format!("{{\"type\":\"serialization_error\",\"error\":\"{}\"}}\n", e);
-                buffer.push_str(&error_msg);
+                let error_event = serde_json::json!({
+                    "type": "serialization_error",
+                    "error": e.to_string()
+                });
+                buffer.push_str(&error_event.to_string());
+                buffer.push('\n');
             }
         }
     }
