@@ -642,7 +642,26 @@ async fn run_agent_loop(
                 MessageContent::Blocks(blocks)
             };
 
-            messages.push(ChatMessage { role: ChatRole::Assistant, content });
+            messages.push(ChatMessage { role: ChatRole::Assistant, content: content.clone() });
+
+            // Record assistant message
+            if let Some(writer) = &trace_writer {
+                let text_content = match &content {
+                    MessageContent::Text(t) => t.clone(),
+                    MessageContent::Blocks(blocks) => {
+                        blocks.iter().filter_map(|b| match b {
+                            ContentBlock::Text { text } => Some(text.as_str()),
+                            _ => None,
+                        }).collect::<Vec<_>>().join("\n")
+                    }
+                };
+                if let Err(e) = writer.record(forge_domain::AgentEvent::AssistantMessage {
+                    content: text_content,
+                    timestamp: chrono::Utc::now().timestamp_millis(),
+                }) {
+                    tracing::warn!("Failed to record AssistantMessage: {}", e);
+                }
+            }
         }
 
         // If no tool calls, check if this is a valid completion or an empty response error
