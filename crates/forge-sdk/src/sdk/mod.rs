@@ -311,6 +311,23 @@ impl ForgeSDK {
                 Ok(writer) => {
                     let writer = Arc::new(writer);
 
+                    // Get git information
+                    let git_branch = std::process::Command::new("git")
+                        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+                        .current_dir(&config_guard.working_dir)
+                        .output()
+                        .ok()
+                        .and_then(|o| String::from_utf8(o.stdout).ok())
+                        .map(|s| s.trim().to_string());
+
+                    let git_commit = std::process::Command::new("git")
+                        .args(["rev-parse", "HEAD"])
+                        .current_dir(&config_guard.working_dir)
+                        .output()
+                        .ok()
+                        .and_then(|o| String::from_utf8(o.stdout).ok())
+                        .map(|s| s.trim().to_string());
+
                     // Record SessionStart event
                     let _ = writer.record(forge_domain::AgentEvent::SessionStart {
                         session_id: sdk.session_id.clone(),
@@ -318,8 +335,8 @@ impl ForgeSDK {
                         context: SessionContext {
                             engine_version: env!("CARGO_PKG_VERSION").to_string(),
                             working_dir: config_guard.working_dir.to_string_lossy().to_string(),
-                            git_branch: None,
-                            git_commit: None,
+                            git_branch,
+                            git_commit,
                             model: config_guard.llm.model.clone(),
                             config_summary: serde_json::json!({
                                 "model": config_guard.llm.model,
@@ -1519,6 +1536,27 @@ impl SdkConfirmationHandler {
     }
 }
 
+impl ForgeSDK {
+    /// Gracefully shutdown SDK and flush trace writer.
+    pub async fn shutdown(mut self) -> Result<()> {
+        if let Some(writer) = self.trace_writer.take() {
+            let session_id = self.session_id.clone();
+            let duration_ms = self.start_time.elapsed().as_millis() as u64;
+
+            let _ = writer.record(forge_domain::AgentEvent::SessionEnd {
+                session_id,
+                timestamp: chrono::Utc::now().timestamp_millis(),
+                duration_ms,
+            });
+
+            if let Ok(writer_owned) = Arc::try_unwrap(writer) {
+                writer_owned.shutdown().await.ok();
+            }
+        }
+        Ok(())
+    }
+}
+
 impl Drop for ForgeSDK {
     fn drop(&mut self) {
         if let Some(writer) = &self.trace_writer {
@@ -1526,14 +1564,20 @@ impl Drop for ForgeSDK {
             let duration_ms = self.start_time.elapsed().as_millis() as u64;
             let writer = Arc::clone(writer);
 
-            tokio::spawn(async move {
-                let _ = writer.record(forge_domain::AgentEvent::SessionEnd {
-                    session_id,
-                    timestamp: chrono::Utc::now().timestamp_millis(),
-                    duration_ms,
+            // Try to flush synchronously if we have a runtime handle
+            if let Ok(handle) = tokio::runtime::Handle::try_current() {
+                // Spawn blocking to avoid deadlock
+                let _ = std::thread::spawn(move || {
+                    handle.block_on(async move {
+                        let _ = writer.record(forge_domain::AgentEvent::SessionEnd {
+                            session_id,
+                            timestamp: chrono::Utc::now().timestamp_millis(),
+                            duration_ms,
+                        });
+                        let _ = writer.flush().await;
+                    });
                 });
-                let _ = writer.flush().await;
-            });
+            }
         }
     }
 }

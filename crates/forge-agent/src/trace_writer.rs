@@ -22,6 +22,8 @@ pub struct TraceWriter {
     tx: mpsc::Sender<TraceWriterMessage>,
     /// Output file path.
     output_path: PathBuf,
+    /// Background task handle.
+    task_handle: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl TraceWriter {
@@ -50,7 +52,7 @@ impl TraceWriter {
         let error_path = output_path.clone();
 
         // Start background writer task
-        tokio::spawn(async move {
+        let task_handle = tokio::spawn(async move {
             let mut event_buffer = Vec::with_capacity(batch_size);
 
             loop {
@@ -97,7 +99,7 @@ impl TraceWriter {
             }
         });
 
-        Ok(Self { tx, output_path })
+        Ok(Self { tx, output_path, task_handle: Some(task_handle) })
     }
 
     /// Record an event (non-blocking).
@@ -125,15 +127,29 @@ impl TraceWriter {
         rx.await.map_err(|_| TraceError::ChannelClosed)?;
         Ok(())
     }
+
+    /// Shutdown writer and wait for background task to complete.
+    pub async fn shutdown(mut self) -> Result<()> {
+        drop(self.tx);
+        if let Some(handle) = self.task_handle.take() {
+            handle.await.map_err(|_| TraceError::ChannelClosed)?;
+        }
+        Ok(())
+    }
 }
 
 /// Write a batch of events to file.
 async fn write_batch(file: &mut File, events: &[AgentEvent]) -> std::io::Result<()> {
     let mut buffer = String::new();
     for event in events {
-        if let Ok(json) = serde_json::to_string(event) {
-            buffer.push_str(&json);
-            buffer.push('\n');
+        match serde_json::to_string(event) {
+            Ok(json) => {
+                buffer.push_str(&json);
+                buffer.push('\n');
+            }
+            Err(e) => {
+                eprintln!("Failed to serialize event: {}", e);
+            }
         }
     }
     file.write_all(buffer.as_bytes()).await?;

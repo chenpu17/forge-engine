@@ -152,7 +152,9 @@ impl TracingConfig {
         // Remove files exceeding max count
         if let Some(max_files) = self.max_trace_files {
             for (path, _) in files.iter().skip(max_files) {
-                let _ = tokio::fs::remove_file(path).await;
+                if let Err(e) = tokio::fs::remove_file(path).await {
+                    eprintln!("Failed to remove old trace file {:?}: {}", path, e);
+                }
             }
         }
 
@@ -163,7 +165,9 @@ impl TracingConfig {
                 if let Ok(modified) = metadata.modified() {
                     if let Ok(age) = now.duration_since(modified) {
                         if age > max_age {
-                            let _ = tokio::fs::remove_file(path).await;
+                            if let Err(e) = tokio::fs::remove_file(path).await {
+                                eprintln!("Failed to remove old trace file {:?}: {}", path, e);
+                            }
                         }
                     }
                 }
