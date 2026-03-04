@@ -1559,25 +1559,19 @@ impl ForgeSDK {
 
 impl Drop for ForgeSDK {
     fn drop(&mut self) {
+        // Best-effort cleanup: record SessionEnd if possible
+        // For guaranteed cleanup, use shutdown() method explicitly
         if let Some(writer) = &self.trace_writer {
             let session_id = self.session_id.clone();
             let duration_ms = self.start_time.elapsed().as_millis() as u64;
             let writer = Arc::clone(writer);
 
-            // Try to flush synchronously if we have a runtime handle
-            if let Ok(handle) = tokio::runtime::Handle::try_current() {
-                // Spawn blocking to avoid deadlock
-                let _ = std::thread::spawn(move || {
-                    handle.block_on(async move {
-                        let _ = writer.record(forge_domain::AgentEvent::SessionEnd {
-                            session_id,
-                            timestamp: chrono::Utc::now().timestamp_millis(),
-                            duration_ms,
-                        });
-                        let _ = writer.flush().await;
-                    });
-                });
-            }
+            // Try non-blocking record
+            let _ = writer.record(forge_domain::AgentEvent::SessionEnd {
+                session_id,
+                timestamp: chrono::Utc::now().timestamp_millis(),
+                duration_ms,
+            });
         }
     }
 }

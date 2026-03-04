@@ -112,6 +112,14 @@ impl TraceWriter {
             })
     }
 
+    /// Record an event (blocking, waits if channel is full).
+    pub async fn record_async(&self, event: AgentEvent) -> Result<()> {
+        self.tx
+            .send(TraceWriterMessage::Event(event))
+            .await
+            .map_err(|_| TraceError::ChannelClosed)
+    }
+
     /// Get output file path.
     pub fn output_path(&self) -> &PathBuf {
         &self.output_path
