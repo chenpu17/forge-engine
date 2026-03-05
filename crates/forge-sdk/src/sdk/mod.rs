@@ -1538,20 +1538,31 @@ impl SdkConfirmationHandler {
 
 impl ForgeSDK {
     /// Gracefully shutdown SDK and flush trace writer.
+    ///
+    /// This method ensures all buffered trace events are written to disk
+    /// before returning. Always call this method before dropping the SDK
+    /// to guarantee no trace data is lost.
     pub async fn shutdown(mut self) -> Result<()> {
         if let Some(writer) = self.trace_writer.take() {
             let session_id = self.session_id.clone();
             let duration_ms = self.start_time.elapsed().as_millis() as u64;
 
+            // Record session end event
             let _ = writer.record(forge_domain::AgentEvent::SessionEnd {
                 session_id,
                 timestamp: chrono::Utc::now().timestamp_millis(),
                 duration_ms,
             });
 
+            // Always flush to ensure data is written, even if Arc::try_unwrap fails
+            let _ = writer.flush().await;
+
+            // Try to take ownership and shutdown the writer
             if let Ok(writer_owned) = Arc::try_unwrap(writer) {
                 writer_owned.shutdown().await.ok();
             }
+            // If Arc::try_unwrap fails, the writer will be dropped and
+            // TraceWriter::drop will handle graceful shutdown
         }
         Ok(())
     }
@@ -1559,19 +1570,21 @@ impl ForgeSDK {
 
 impl Drop for ForgeSDK {
     fn drop(&mut self) {
-        // Best-effort cleanup: record SessionEnd if possible
-        // For guaranteed cleanup, use shutdown() method explicitly
+        // Best-effort cleanup: record SessionEnd and attempt flush
+        // TraceWriter::drop now handles graceful shutdown with timeout
         if let Some(writer) = &self.trace_writer {
             let session_id = self.session_id.clone();
             let duration_ms = self.start_time.elapsed().as_millis() as u64;
-            let writer = Arc::clone(writer);
 
-            // Try non-blocking record
+            // Try non-blocking record of session end
             let _ = writer.record(forge_domain::AgentEvent::SessionEnd {
                 session_id,
                 timestamp: chrono::Utc::now().timestamp_millis(),
                 duration_ms,
             });
+
+            // Note: We can't call async flush() in Drop, but TraceWriter::drop
+            // will now attempt graceful shutdown with a timeout
         }
     }
 }

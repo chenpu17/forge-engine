@@ -768,6 +768,22 @@ async fn run_agent_loop(
             }
         }
 
+        // Record tool calls to trace writer for session recording
+        if let Some(writer) = &trace_writer {
+            for (call, result) in tool_calls.iter().zip(tool_results.iter()) {
+                let _ = writer.record(forge_domain::AgentEvent::ToolCallStart {
+                    id: call.id.clone(),
+                    name: call.name.clone(),
+                    input: call.input.clone(),
+                });
+                let _ = writer.record(forge_domain::AgentEvent::ToolResult {
+                    id: result.tool_call_id.clone(),
+                    output: result.output.clone(),
+                    is_error: result.is_error,
+                });
+            }
+        }
+
         // End trace round
         trace_recorder.end_round();
 

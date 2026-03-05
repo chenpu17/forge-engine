@@ -25,6 +25,8 @@ pub struct TraceWriter {
     output_path: PathBuf,
     /// Background task handle.
     task_handle: Option<tokio::task::JoinHandle<()>>,
+    /// Shutdown signal sender for graceful Drop.
+    shutdown_tx: Option<oneshot::Sender<()>>,
 }
 
 impl TraceWriter {
@@ -49,6 +51,9 @@ impl TraceWriter {
         // Create channel
         let (tx, mut rx) = mpsc::channel::<TraceWriterMessage>(buffer_size);
 
+        // Create shutdown signal channel
+        let (shutdown_tx, mut shutdown_rx) = oneshot::channel::<()>();
+
         // Clone path for error messages
         let error_path = output_path.clone();
 
@@ -58,6 +63,18 @@ impl TraceWriter {
 
             loop {
                 tokio::select! {
+                    // Check shutdown signal first for faster response
+                    _ = &mut shutdown_rx => {
+                        // Shutdown signal received, write remaining events and exit
+                        if !event_buffer.is_empty() {
+                            if let Err(e) = write_batch(&mut file, &event_buffer).await {
+                                tracing::warn!("Failed to write final trace batch to {:?}: {}", error_path, e);
+                            }
+                        }
+                        let _ = file.flush().await;
+                        let _ = file.shutdown().await;
+                        break;
+                    }
                     msg = rx.recv() => {
                         match msg {
                             Some(TraceWriterMessage::Event(event)) => {
@@ -101,7 +118,12 @@ impl TraceWriter {
             }
         });
 
-        Ok(Self { tx: Some(tx), output_path, task_handle: Some(task_handle) })
+        Ok(Self {
+            tx: Some(tx),
+            output_path,
+            task_handle: Some(task_handle),
+            shutdown_tx: Some(shutdown_tx),
+        })
     }
 
     /// Record an event (non-blocking).
@@ -160,14 +182,39 @@ impl TraceWriter {
     }
 }
 
-/// Drop implementation aborts the background task.
+/// Drop implementation attempts graceful shutdown.
 ///
-/// WARNING: This may lose buffered events. Always call `shutdown()` explicitly
-/// to ensure all events are flushed before dropping.
+/// Sends shutdown signal to background task and waits briefly for completion.
+/// If the task doesn't complete in time, it will be aborted.
 impl Drop for TraceWriter {
     fn drop(&mut self) {
+        // First, close the message channel to signal no more events
+        drop(self.tx.take());
+
+        // Send shutdown signal
+        if let Some(shutdown_tx) = self.shutdown_tx.take() {
+            // Signal the background task to shut down gracefully
+            let _ = shutdown_tx.send(());
+        }
+
+        // Wait for background task to complete (with timeout)
         if let Some(handle) = self.task_handle.take() {
-            handle.abort();
+            // Try to wait for graceful shutdown
+            // Use block_in_place if we're in a tokio runtime, otherwise abort
+            if tokio::runtime::Handle::try_current().is_ok() {
+                // We're in a tokio runtime, use block_in_place
+                tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current().block_on(async {
+                        tokio::time::timeout(
+                            std::time::Duration::from_millis(500),
+                            handle
+                        ).await.ok();
+                    });
+                });
+            } else {
+                // Not in a tokio runtime, just abort
+                handle.abort();
+            }
         }
     }
 }

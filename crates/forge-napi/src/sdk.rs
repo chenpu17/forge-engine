@@ -1124,4 +1124,27 @@ impl ForgeSDK {
         sdk.register_git_tool().await;
         Ok(())
     }
+
+    // ========================
+    // Shutdown
+    // ========================
+
+    /// Gracefully shutdown the SDK and flush trace data.
+    ///
+    /// This method ensures all buffered trace events are written to disk
+    /// before returning. Always call this method before disposing the SDK
+    /// to guarantee no trace data is lost.
+    ///
+    /// After calling this method, the SDK will be in an uninitialized state
+    /// and must be re-initialized with `init()` before use.
+    #[napi]
+    pub async fn shutdown(&self) -> napi::Result<()> {
+        let mut guard = self.inner.write().await;
+        if let Some(sdk) = guard.take() {
+            sdk.shutdown()
+                .await
+                .map_err(|e| napi::Error::from_reason(format!("Failed to shutdown SDK: {e}")))?;
+        }
+        Ok(())
+    }
 }
