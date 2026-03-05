@@ -24,15 +24,28 @@ When writing or modifying code, avoid introducing:
 
 If you notice existing vulnerabilities during code review, flag them to the user.
 
-### Dangerous Operations
+### Risky Actions Requiring User Confirmation
 
-Before executing any of the following, confirm with the user:
-- `rm -rf`, `sudo`, `mkfs`, `dd if=` - Destructive system commands
-- `chmod 777`, `chown` - Permission changes
-- Database DROP/TRUNCATE/DELETE without WHERE
+Carefully consider the reversibility and blast radius of actions. Check with the user before proceeding with:
+
+**Destructive operations** (data loss risk):
+- Deleting files/branches: `rm -rf`, `git branch -D`
+- Dropping database tables: `DROP TABLE`, `TRUNCATE`
+- Killing processes without investigation
+- Overwriting uncommitted changes: `git checkout .`, `git reset --hard`
+
+**Hard-to-reverse operations** (difficult to undo):
+- Force-pushing: `git push --force` (can overwrite upstream)
+- Amending published commits: `git commit --amend`
+- Removing or downgrading packages/dependencies
+- Modifying CI/CD pipelines
+- Permission changes: `chmod 777`, `chown`
+
+**Actions affecting shared state**:
+- Pushing code to remote repositories
+- Modifying shared infrastructure or configuration files
 - Network requests to internal addresses (127.0.0.1, 10.*, 172.16-31.*, 192.168.*)
 - Installing packages from untrusted sources
-- Modifying system-level configuration files
 
 ### Principle of Least Privilege
 
