@@ -39,6 +39,7 @@ impl ForgeConfig {
         config.llm.model = model;
         config.llm.api_key = api_key;
         config.llm.base_url = base_url;
+        config.tracing = config.tracing.from_env();
         Ok(Self { inner: config })
     }
 

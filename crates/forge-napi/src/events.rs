@@ -336,6 +336,8 @@ impl From<forge_sdk::AgentEvent> for JsAgentEvent {
                 e.id = Some(trace_id);
                 e
             }
+            // Tracing events are internal and not exposed to NAPI
+            _ => Self::new("Internal"),
         }
     }
 }
